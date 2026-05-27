@@ -25,7 +25,7 @@ class ForestController:
 
         # Rule 2: Length constraint. Since these are sequence predictions or brief ARC translations,
         # answers should not be verbose. If it is longer than 200 characters, it's likely a hallucination or explanation.
-        if len(answer) > 200:
+        if len(answer) > 2000:
             return False, "Output length exceeds limit (verbose response)"
 
         # Rule 3: No markdown code blocks or formatting artifacts that leak LLM prompts

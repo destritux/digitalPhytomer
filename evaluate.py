@@ -5,9 +5,11 @@ from ollama_client import OllamaClient
 from dataset import DatasetGenerator
 from forest_controller import ForestController
 from tree_controller import TreeController
+from vector_store import SomaticVectorStore
 
 # Configuration
 MODEL_NAME = "qwen2.5:0.5b"
+HIGH_DENSITY_MODEL = "qwen2.5:1.5b"
 
 def verify_answer(answer_text, expected_str):
     """
@@ -22,43 +24,107 @@ def verify_answer(answer_text, expected_str):
         return expected_str in numbers
     return False
 
-def run_group_a(client, tasks):
+def run_group_a(client, tasks, a_memory):
     """
-    Group A (Baseline): Isolated local LLM instance.
+    Group A (Baseline): Isolated local LLM instance with self-correction, dynamic upgrades, and context clearing.
     """
     print("\n" + "="*50)
-    print("RUNNING GROUP A (BASELINE - SINGLE LLM)")
+    print("RUNNING GROUP A (BASELINE - MONOLITHIC LLM)")
     print("="*50)
     
     client.reset_stats()
     results = []
     start_time = time.time()
+    consecutive_failures = 0
+    current_model = MODEL_NAME
+    
+    system_prompt = (
+        "You are a sequence reasoning specialist. Analyze the input sequence, "
+        "identify the mathematical logical pattern (addition, multiplication, etc.), "
+        "and output the single correct next number in the sequence."
+    )
     
     for idx, task in enumerate(tasks):
         print(f"[Group A] Processing Task {task['id']} ({task['type']})...")
         prompt = task["prompt"]
         
-        # Isolated single call with default settings
-        resp = client.generate(prompt=prompt, system_prompt=None, temperature=0.7, model_name=MODEL_NAME)
+        # Upgrades model if consecutive failures >= 2
+        if consecutive_failures >= 2:
+            if current_model != HIGH_DENSITY_MODEL:
+                print(f"[Group A] [TISSUE ISOLATION] Spawning virgin solver on high-density model '{HIGH_DENSITY_MODEL}' due to stress.")
+                current_model = HIGH_DENSITY_MODEL
+        else:
+            if current_model != MODEL_NAME:
+                print(f"[Group A] [Allostasis] Restoring to default model '{MODEL_NAME}'.")
+                current_model = MODEL_NAME
+                
+        is_correct = False
+        answer = ""
+        history = []
         
-        is_correct = verify_answer(resp["text"], task["expected"])
+        # Self-correction loop: up to 3 attempts
+        for attempt in range(3):
+            if attempt == 0:
+                current_prompt = prompt
+            else:
+                current_prompt = (
+                    f"Previous Attempt History:\n" + 
+                    "\n".join([f"Attempt {i+1}: {ans} (Result: Incorrect)" for i, ans in enumerate(history)]) +
+                    f"\n\nTask:\n{prompt}\n\n"
+                    f"Please re-analyze the sequence step-by-step, correct any errors, and output the correct next number."
+                )
+            
+            resp = client.generate(prompt=current_prompt, system_prompt=system_prompt, temperature=0.7, model_name=current_model)
+            answer = resp["text"].strip()
+            
+            # Apply Restriction Genome to Group A for scientific symmetry
+            from forest_controller import ForestController
+            temp_fc = ForestController(client)
+            is_allowed, reason = temp_fc.evaluate_restriction_genome(answer)
+            if not is_allowed:
+                print(f"  [Attempt {attempt+1}] Rejected by Restriction Genome: {reason}")
+                is_correct = False
+            else:
+                is_correct = verify_answer(answer, task["expected"])
+            
+            history.append(answer)
+            
+            if is_correct:
+                print(f"  [Attempt {attempt+1}] Correct: {is_correct} | Answer: {answer}")
+                # Store in somatic memory
+                task_emb = client.get_embeddings(prompt)
+                a_memory.add_document(prompt, task_emb, {"prompt": prompt, "solution": answer})
+                break
+            else:
+                print(f"  [Attempt {attempt+1}] Incorrect: {answer}")
+                
+        if is_correct:
+            consecutive_failures = 0
+        else:
+            consecutive_failures += 1
+            
+        current_stats = client.get_stats()
         results.append({
             "id": task["id"],
             "correct": is_correct,
-            "answer": resp["text"],
+            "answer": answer,
             "expected": task["expected"],
-            "tokens": resp["prompt_tokens"] + resp["completion_tokens"]
+            "tokens": current_stats["total_tokens"]
         })
-        print(f"  Expected: {task['expected']} | Answer: {resp['text'].strip()} | Correct: {is_correct}")
-        # Add a tiny sleep to let the CPU rest between LLM calls
         time.sleep(0.5)
         
     duration = time.time() - start_time
     stats = client.get_stats()
-    
     accuracy = sum(1 for r in results if r["correct"]) / len(tasks)
     
-    print(f"\n[Group A Summary] Accuracy: {accuracy*100:.1f}%, Total Tokens: {stats['total_tokens']}, Time: {duration:.2f}s")
+    # Compute individual token counts for results (deltas)
+    last_t = 0
+    for r in results:
+        t_used = r["tokens"]
+        r["tokens"] = t_used - last_t
+        last_t = t_used
+        
+    print(f"\n[Group A Summary] Accuracy: {accuracy*100:.1f}%, Total Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}), Time: {duration:.2f}s")
     return results, stats, duration
 
 def run_group_b(client, tasks, fc):
@@ -74,6 +140,8 @@ def run_group_b(client, tasks, fc):
     start_time = time.time()
     
     tc = fc.tree_controllers["Sequence Reasoning"]
+    tc.max_attempts = 3
+    tc.disable_assembly = True
     # Clear somatic memory from previous runs
     tc.somatic_memory.clear()
     
@@ -126,8 +194,10 @@ def run_group_c(client, tasks, fc_c):
     results = []
     start_time = time.time()
     
-    # Clear somatic memory for all tree controllers
+    # Clear somatic memory and configure tree controllers for max 1 attempt to maintain 3-call budget ceiling
     for tc in fc_c.tree_controllers.values():
+        tc.max_attempts = 1
+        tc.disable_assembly = True
         tc.somatic_memory.clear()
         
     last_tokens = 0
@@ -167,10 +237,10 @@ def run_group_c(client, tasks, fc_c):
     print(f"\n[Group C Summary] Accuracy: {accuracy*100:.1f}%, Total Tokens: {stats['total_tokens']}, Time: {duration:.2f}s")
     return results, stats, duration
 
-def run_retention_test(client, tasks, group_name, solved_ids, fc=None):
+def run_retention_test(client, tasks, group_name, solved_ids, fc=None, a_memory=None):
     """
     Retention Index Test: Re-evaluates solved tasks to measure forgetting vs somatic recall.
-    For Group B & C, we intercept exact matches using the vector database(s).
+    Uses vector/semantic memory lookup for all groups for complete symmetry.
     """
     print("\n" + "-"*50)
     print(f"RUNNING RETENTION TEST FOR {group_name}")
@@ -186,7 +256,6 @@ def run_retention_test(client, tasks, group_name, solved_ids, fc=None):
             tc = fc.tree_controllers["Sequence Reasoning"]
             tc.trigger_allostasis()
         
-    # We choose tasks that were successfully solved
     test_tasks = [t for t in tasks if t["id"] in solved_ids]
     if not test_tasks:
         print(f"[{group_name} Retention] No solved tasks found in main run. Testing first 5 tasks.")
@@ -201,20 +270,29 @@ def run_retention_test(client, tasks, group_name, solved_ids, fc=None):
     for task in test_tasks:
         print(f"[{group_name} Retention] Re-evaluating Task {task['id']}...")
         
-        if fc:
+        if a_memory:
+            # Group A semantic memory query
+            task_emb = client.get_embeddings(task["prompt"])
+            hits = a_memory.query(task_emb, limit=1, min_similarity=0.95)
+            if hits:
+                ans = hits[0]["metadata"]["solution"]
+                print(f"  [Somatic Memory Hit] Instant recall: '{ans}' (Similarity={hits[0]['similarity']:.3f})")
+                is_correct = verify_answer(ans, task["expected"])
+            else:
+                resp = client.generate(prompt=task["prompt"], system_prompt=None, temperature=0.7, model_name=MODEL_NAME)
+                ans = resp["text"]
+                is_correct = verify_answer(ans, task["expected"])
+        elif fc:
             task_emb = client.get_embeddings(task["prompt"])
             hits = []
             
             if is_group_c:
-                # Group C: check somatic memory of both Arithmetic and Geometric trees
                 arith_tc = fc.tree_controllers["Arithmetic"]
                 geom_tc = fc.tree_controllers["Geometric"]
-                
                 hits = arith_tc.somatic_memory.query(task_emb, limit=1, min_similarity=0.95)
                 if not hits:
                     hits = geom_tc.somatic_memory.query(task_emb, limit=1, min_similarity=0.95)
             else:
-                # Group B: check somatic memory of Sequence Reasoning tree
                 tc = fc.tree_controllers["Sequence Reasoning"]
                 hits = tc.somatic_memory.query(task_emb, limit=1, min_similarity=0.95)
             
@@ -223,7 +301,6 @@ def run_retention_test(client, tasks, group_name, solved_ids, fc=None):
                 print(f"  [Somatic Memory Hit] Instant recall: '{ans}' (Similarity={hits[0]['similarity']:.3f})")
                 is_correct = verify_answer(ans, task["expected"])
             else:
-                # Fallback to FC solve
                 res = fc.submit_task(
                     domain="Sequence Reasoning",
                     problem=task["prompt"],
@@ -233,7 +310,6 @@ def run_retention_test(client, tasks, group_name, solved_ids, fc=None):
                 ans = res["answer"]
                 is_correct = verify_answer(ans, task["expected"])
         else:
-            # Group A: Baseline single LLM call
             resp = client.generate(prompt=task["prompt"], system_prompt=None, temperature=0.7, model_name=MODEL_NAME)
             ans = resp["text"]
             is_correct = verify_answer(ans, task["expected"])
@@ -344,13 +420,7 @@ def main():
     tc = TreeController("Sequence Reasoning", client)
     fc.add_tree_controller("Sequence Reasoning", tc)
 
-    # 4. Run Group A (Baseline)
-    a_results, a_stats, a_duration = run_group_a(client, tasks)
-
-    # 5. Run Group B (Holarchic System - 1 Tree)
-    b_results, b_stats, b_duration = run_group_b(client, tasks, fc)
-
-    # 6. Setup Group C Forest Controller & 3 Tree Controllers
+    # Setup Group C Forest Controller & 3 Tree Controllers
     fc_c = ForestController(client)
     arith_tc = TreeController("Arithmetic", client)
     geom_tc = TreeController("Geometric", client)
@@ -360,8 +430,32 @@ def main():
     fc_c.add_tree_controller("Geometric", geom_tc)
     fc_c.add_tree_controller("Validation", val_tc)
 
-    # 7. Run Group C (Forest Coordinator - 3 Trees)
-    c_results, c_stats, c_duration = run_group_c(client, tasks, fc_c)
+    # Warm up models
+    print("[Warm-up] Initializing models in GPU memory...")
+    client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
+    client.generate(prompt="Hello", model_name="qwen2.5:1.5b")
+    print("[Warm-up] Done.")
+
+    from vector_store import SomaticVectorStore
+    a_memory = SomaticVectorStore()
+
+    # 4. Define evaluation runs for randomization
+    runs = [
+        ("Group A", lambda: run_group_a(client, tasks, a_memory)),
+        ("Group B", lambda: run_group_b(client, tasks, fc)),
+        ("Group C", lambda: run_group_c(client, tasks, fc_c))
+    ]
+    import random
+    random.shuffle(runs)
+    print(f"\n[Experimental Design] Running groups in randomized order: {[name for name, _ in runs]}")
+    
+    results_map = {}
+    for name, run_fn in runs:
+        results_map[name] = run_fn()
+        
+    a_results, a_stats, a_duration = results_map["Group A"]
+    b_results, b_stats, b_duration = results_map["Group B"]
+    c_results, c_stats, c_duration = results_map["Group C"]
 
     # 8. Run Retention Tests on tasks solved successfully by each group
     a_solved_ids = [r["id"] for r in a_results if r["correct"]]
@@ -369,7 +463,7 @@ def main():
     c_solved_ids = [r["id"] for r in c_results if r["correct"]]
     
     # Re-run retention for Group A
-    a_ret_acc, a_ret_tok, a_ret_dur = run_retention_test(client, tasks, "Group A", a_solved_ids)
+    a_ret_acc, a_ret_tok, a_ret_dur = run_retention_test(client, tasks, "Group A", a_solved_ids, a_memory=a_memory)
     # Re-run retention for Group B
     b_ret_acc, b_ret_tok, b_ret_dur = run_retention_test(client, tasks, "Group B", b_solved_ids, fc=fc)
     # Re-run retention for Group C
@@ -399,9 +493,9 @@ def main():
     b_correct_count = sum(1 for r in b_results if r["correct"])
     c_correct_count = sum(1 for r in c_results if r["correct"])
     
-    a_efficiency = a_stats["total_tokens"] / a_correct_count if a_correct_count > 0 else float("inf")
-    b_efficiency = b_stats["total_tokens"] / b_correct_count if b_correct_count > 0 else float("inf")
-    c_efficiency = c_stats["total_tokens"] / c_correct_count if c_correct_count > 0 else float("inf")
+    a_efficiency = a_stats["weighted_tokens"] / a_correct_count if a_correct_count > 0 else float("inf")
+    b_efficiency = b_stats["weighted_tokens"] / b_correct_count if b_correct_count > 0 else float("inf")
+    c_efficiency = c_stats["weighted_tokens"] / c_correct_count if c_correct_count > 0 else float("inf")
 
     print(f"Emergent Generalization Rate (Overall):")
     print(f"  Group A (Baseline):  {a_acc_overall*100:.1f}%")
@@ -428,7 +522,7 @@ def main():
     a_pre_tokens = sum(r["tokens"] for r in a_results[:10])
     a_post_tokens = sum(r["tokens"] for r in a_results[10:])
     a_delta_C = a_post_tokens - a_pre_tokens
-    a_yield = (a_acc_overall * 100.0 * 1000000.0) / a_stats["total_tokens"] if a_stats["total_tokens"] > 0 else 0.0
+    a_yield = (a_acc_overall * 100.0 * 1000000.0) / a_stats["weighted_tokens"] if a_stats["weighted_tokens"] > 0 else 0.0
     a_turnover = 0.0
     a_cfi = a_pre_shift - a_ret_acc
     a_allostatic_load = a_stats["prompt_tokens"]
@@ -436,7 +530,7 @@ def main():
     b_pre_tokens = sum(r["tokens"] for r in b_results[:10])
     b_post_tokens = sum(r["tokens"] for r in b_results[10:])
     b_delta_C = b_post_tokens - b_pre_tokens
-    b_yield = (b_acc_overall * 100.0 * 1000000.0) / b_stats["total_tokens"] if b_stats["total_tokens"] > 0 else 0.0
+    b_yield = (b_acc_overall * 100.0 * 1000000.0) / b_stats["weighted_tokens"] if b_stats["weighted_tokens"] > 0 else 0.0
     b_tc = fc.tree_controllers["Sequence Reasoning"]
     b_turnover = b_tc.destruction_count / b_tc.creation_count if b_tc.creation_count > 0 else 0.0
     b_cfi = b_pre_shift - b_ret_acc
@@ -445,7 +539,7 @@ def main():
     c_pre_tokens = sum(r["tokens"] for r in c_results[:10])
     c_post_tokens = sum(r["tokens"] for r in c_results[10:])
     c_delta_C = c_post_tokens - c_pre_tokens
-    c_yield = (c_acc_overall * 100.0 * 1000000.0) / c_stats["total_tokens"] if c_stats["total_tokens"] > 0 else 0.0
+    c_yield = (c_acc_overall * 100.0 * 1000000.0) / c_stats["weighted_tokens"] if c_stats["weighted_tokens"] > 0 else 0.0
     c_creations = sum(tc.creation_count for tc in fc_c.tree_controllers.values())
     c_destructions = sum(tc.destruction_count for tc in fc_c.tree_controllers.values())
     c_turnover = c_destructions / c_creations if c_creations > 0 else 0.0

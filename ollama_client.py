@@ -10,6 +10,7 @@ class OllamaClient:
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_calls = 0
+        self.model_stats = {}
 
     def pull_model(self, model_name=None):
         if model_name is None:
@@ -83,6 +84,13 @@ class OllamaClient:
                 self.total_prompt_tokens += prompt_tokens
                 self.total_completion_tokens += completion_tokens
                 
+                # Model-specific tracking
+                if model_name not in self.model_stats:
+                    self.model_stats[model_name] = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+                self.model_stats[model_name]["prompt_tokens"] += prompt_tokens
+                self.model_stats[model_name]["completion_tokens"] += completion_tokens
+                self.model_stats[model_name]["calls"] += 1
+                
                 return {
                     "text": response_text,
                     "prompt_tokens": prompt_tokens,
@@ -127,14 +135,29 @@ class OllamaClient:
         return vec_np.tolist()
 
     def get_stats(self):
+        weighted_tokens = self.get_weighted_tokens()
         return {
             "total_calls": self.total_calls,
             "prompt_tokens": self.total_prompt_tokens,
             "completion_tokens": self.total_completion_tokens,
-            "total_tokens": self.total_prompt_tokens + self.total_completion_tokens
+            "total_tokens": self.total_prompt_tokens + self.total_completion_tokens,
+            "weighted_tokens": weighted_tokens
         }
+
+    def get_weighted_tokens(self, weight_map=None):
+        if weight_map is None:
+            weight_map = {
+                "qwen2.5:0.5b": 1.0,
+                "qwen2.5:1.5b": 3.0
+            }
+        weighted = 0.0
+        for mname, stats in self.model_stats.items():
+            weight = weight_map.get(mname, 1.0)
+            weighted += (stats["prompt_tokens"] + stats["completion_tokens"]) * weight
+        return weighted
 
     def reset_stats(self):
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_calls = 0
+        self.model_stats = {}

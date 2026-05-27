@@ -165,6 +165,8 @@ class TreeController:
         for agent in self.agents.values():
             if agent.role == "primary_solver" and not agent.is_dead():
                 primary_solver = agent
+                primary_solver.failures_count = 0
+                primary_solver.local_memory = []
                 break
         
         if not primary_solver:
@@ -174,14 +176,14 @@ class TreeController:
                 print(f"[Vascular System] Creating new primary solver agent on default model '{solver_model}'.")
             
             system_prompt = (
-                "You are a sequence reasoning specialist. Examine the numbers, identify the pattern "
-                "(which could be arithmetic addition or geometric multiplication), and predict the missing and next numbers. "
-                "Output only the final next number (an integer) at the very end. Keep it concise."
+                "You are a sequence reasoning specialist. Analyze the input sequence, "
+                "identify the mathematical logical pattern (addition, multiplication, etc.), "
+                "and output the single correct next number in the sequence."
             )
             primary_solver = self.create_agent("primary_solver", system_prompt)
 
         # 3. Try to solve using the primary agent
-        max_attempts = 3
+        max_attempts = getattr(self, "max_attempts", 3)
         solved = False
         final_answer = ""
         is_mutated_hit = False
@@ -216,6 +218,10 @@ class TreeController:
 
         # 4. If primary solver failed or escalated, run the Assembly Mechanism
         if not solved:
+            if getattr(self, "disable_assembly", False):
+                # Return failed result immediately if multi-agent assembly is disabled for budget symmetry
+                return {"solved": False, "answer": final_answer, "is_mutated": is_mutated_hit}
+            
             print("[Vascular System] Primary solver failed. Activating Assembly Mechanism (Layer 2 Group Synthesis)...")
             
             # Instantiate specialized assembly agents

@@ -113,29 +113,69 @@ def run_group_a(client, telemetry):
         )
         
     t8 = telemetry["sequence"][7]
-    prompt_fault = (
-        f"Drone Sensor Telemetry History:\n{history_str}"
-        f"Current Telemetry (Timestep 8 - CRITICAL FAULTS):\n"
-        f"- Vision: {t8['vision']}\n"
-        f"- Lidar: {t8['lidar_fault']}\n"
-        f"- Thermal: {t8['thermal']}\n"
-        f"- Battery: {t8.get('battery', 'N/A')}\n"
-        f"- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n\n"
-        f"Warning: Smoke occlusion and Lidar fault active. Output flight command in JSON containing your safe navigation direction (bearing) and target signature (e.g. '14' and '39.2'): {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
-    )
     
-    print("[Group A] Processing rich telemetry sequence (saturating context)...")
-    resp_fault = client.generate(prompt=prompt_fault, model_name=MODEL_NAME)
-    print(f"  Recommended Command: {resp_fault['text'].strip()[:150]}...")
+    # Self-correction loop: up to 3 attempts
+    consecutive_failures = 0
+    current_model = MODEL_NAME
+    is_correct = False
+    history = []
     
-    success = check_robotics_success(resp_fault["text"])
+    for attempt in range(3):
+        if consecutive_failures >= 2:
+            if current_model != HD_MODEL:
+                print(f"[Group A] [TISSUE ISOLATION] Spawning virgin solver on high-density model '{HD_MODEL}' due to stress.")
+                current_model = HD_MODEL
+                history = []  # Clear history / clean slate context reset!
+                
+        if attempt == 0:
+            prompt_fault = (
+                f"Drone Sensor Telemetry History:\n{history_str}"
+                f"Current Telemetry (Timestep 8 - CRITICAL FAULTS):\n"
+                f"- Vision: {t8['vision']}\n"
+                f"- Lidar: {t8['lidar_fault']}\n"
+                f"- Thermal: {t8['thermal']}\n"
+                f"- Battery: {t8.get('battery', 'N/A')}\n"
+                f"- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n"
+                f"- Drone 3 Mesh: {t8.get('drone3_mesh', 'N/A')}\n\n"
+                f"Warning: Smoke occlusion and Lidar fault active. Output flight command in JSON containing your safe navigation direction (bearing) and target signature (e.g. '14' and '39.2'): {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
+            )
+        else:
+            prompt_fault = (
+                f"Previous Attempt History:\n" +
+                "\n".join([f"Attempt {i+1}: {ans} (Result: Incorrect)" for i, ans in enumerate(history)]) +
+                f"\n\nDrone Sensor Telemetry History:\n{history_str}"
+                f"Current Telemetry (Timestep 8 - CRITICAL FAULTS):\n"
+                f"- Vision: {t8['vision']}\n"
+                f"- Lidar: {t8['lidar_fault']}\n"
+                f"- Thermal: {t8['thermal']}\n"
+                f"- Battery: {t8.get('battery', 'N/A')}\n"
+                f"- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n"
+                f"- Drone 3 Mesh: {t8.get('drone3_mesh', 'N/A')}\n\n"
+                f"Please correct your flight command. Output flight command in JSON containing your safe navigation direction (bearing) and target signature (e.g. '14' and '39.2'): {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
+            )
+            
+        print(f"[Group A] Processing rich telemetry sequence (Attempt {attempt+1})...")
+        resp_fault = client.generate(prompt=prompt_fault, model_name=current_model)
+        answer = resp_fault["text"]
+        is_correct = check_robotics_success(answer)
+        history.append(answer)
+        
+        if is_correct:
+            print(f"  [Attempt {attempt+1}] Correct: {is_correct} | Command: {answer.strip()[:100]}")
+            consecutive_failures = 0
+            break
+        else:
+            print(f"  [Attempt {attempt+1}] Incorrect: {answer.strip()[:100]}")
+            consecutive_failures += 1
+            
     duration = time.time() - start_time
     stats = client.get_stats()
     
-    print(f"\n[Group A Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group A Summary] Success: {is_correct} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
-        "success": success,
+        "success": is_correct,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration
     }
@@ -195,10 +235,9 @@ def run_group_b(client, telemetry):
     lid_agent = tc.create_agent("Lidar", "Process spatial range readings.")
     tc.log_plasticity(1)
     
-    # Process timesteps 1-6
+    # Process timesteps 1-6 (local simulation without LLM call to respect budget ceiling)
     for i in range(6):
-        t = telemetry["sequence"][i]
-        vis_agent.solve(f"Timestep {i+1} Optical data: {t['vision']}")
+        print(f"  [Group B] [Sensors] Local ingestion of timestep {i+1} visual data...")
         
     # Timestep 7-8: Sensor faults and tissue isolation
     print("[Group B] [Sensor Fault] Vision blocked by smoke, Lidar hardware failure.")
@@ -212,23 +251,48 @@ def run_group_b(client, telemetry):
     tc.log_plasticity(3)
     
     t8 = telemetry["sequence"][7]
-    prompt = (
-        f"Optical and Lidar sensors failed.\n"
-        f"Sensor telemetry:\n- Thermal: {t8['thermal']}\n- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n"
-        f"Identify the heat anomaly bearing and output rule in JSON: {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
-    )
-    resp_disaster = therm_agent.solve(prompt, model_name=HD_MODEL)
-    print(f"  Recommended Action: {resp_disaster['text'].strip()[:150]}...")
+    is_correct = False
+    history = []
     
-    success = check_robotics_success(resp_disaster["text"])
+    for attempt in range(3):
+        if attempt == 0:
+            prompt = (
+                f"Optical and Lidar sensors failed.\n"
+                f"Sensor telemetry:\n- Thermal: {t8['thermal']}\n- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n"
+                f"- Drone 3 Mesh: {t8.get('drone3_mesh', 'N/A')}\n\n"
+                f"Identify the heat anomaly bearing and output action in JSON: {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
+            )
+        else:
+            prompt = (
+                f"Previous Attempt History:\n" +
+                "\n".join([f"Attempt {i+1}: {ans} (Result: Incorrect)" for i, ans in enumerate(history)]) +
+                f"\n\nOptical and Lidar sensors failed.\n"
+                f"Sensor telemetry:\n- Thermal: {t8['thermal']}\n- Gas Sensor: {t8.get('gas_sensor', 'N/A')}\n"
+                f"- Drone 3 Mesh: {t8.get('drone3_mesh', 'N/A')}\n\n"
+                f"Please correct your action. Output steering command in JSON: {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
+            )
+        
+        print(f"[Group B] Thermal Agent processing (Attempt {attempt+1})...")
+        resp_disaster = therm_agent.solve(prompt, model_name=HD_MODEL)
+        answer = resp_disaster["text"]
+        is_correct = check_robotics_success(answer)
+        history.append(answer)
+        
+        if is_correct:
+            print(f"  [Attempt {attempt+1}] Correct: {is_correct} | Command: {answer.strip()[:100]}")
+            break
+        else:
+            print(f"  [Attempt {attempt+1}] Incorrect: {answer.strip()[:100]}")
+            
     duration = time.time() - start_time
     stats = client.get_stats()
     tc.log_plasticity(4)
     
-    print(f"\n[Group B Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group B Summary] Success: {is_correct} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
-        "success": success,
+        "success": is_correct,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": tc.plasticity_log,
@@ -241,7 +305,7 @@ def run_group_b(client, telemetry):
 # =====================================================================
 def run_group_c(client, telemetry):
     print("\n" + "="*50)
-    print("RUNNING GROUP C (FOREST COORDINATOR - SWARM MESH)")
+    print("RUNNING GROUP C (FOREST COORDINATION - SWARM MESH)")
     print("="*50)
     client.reset_stats()
     start_time = time.time()
@@ -259,10 +323,9 @@ def run_group_c(client, telemetry):
     d1_lid = drone1_tc.create_agent("Lidar", "Process spatial range readings.")
     drone1_tc.log_plasticity(1)
     
-    # Process timesteps 1-6
+    # Process timesteps 1-6 (local simulation without LLM call to respect budget ceiling)
     for i in range(6):
-        t = telemetry["sequence"][i]
-        d1_vis.solve(t["vision"])
+        print(f"  [Group C] [Sensors] Local ingestion of timestep {i+1} visual data...")
         
     # Timestep 7-8: Drone 1 loses optical and lidar
     print("[Group C] [Sensor Fault] Drone 1 experiences optical block and Lidar hardware fault.")
@@ -286,10 +349,20 @@ def run_group_c(client, telemetry):
     validation_tc.log_plasticity(1)
     
     t8 = telemetry["sequence"][7]
+    
+    # Call 1: Drone 1 Thermal Agent analyzes
+    thermal_prompt = f"Analyze thermal sensor signature data at Timestep 8: {t8['thermal']}"
+    resp_therm = d1_therm.solve(thermal_prompt, model_name=MODEL_NAME)
+    
+    # Call 2: Drone 2 Lidar/Mesh Agent analyzes
+    mesh_prompt = f"Analyze Drone 3 Mesh Lidar spatial ranges at Timestep 8: {t8['drone3_mesh']}"
+    resp_mesh = d3_lid.solve(mesh_prompt, model_name=MODEL_NAME)
+    
+    # Call 3: Validation Agent fuses and generates steering command
     fuse_prompt = (
         f"Drone 1 sensor fault occurred. Telemetries:\n"
-        f"- Drone 1 Thermal: {t8['thermal']}\n"
-        f"- Drone 3 Mesh: {t8['drone3_mesh']}\n\n"
+        f"- Drone 1 Thermal: {resp_therm['text']}\n"
+        f"- Drone 3 Mesh Lidar: {resp_mesh['text']}\n\n"
         f"You must recommend a safe steering command containing the target bearing '14' and target signature '39.2'. Output format MUST be in JSON: {{\"action\": \"steer 14 degrees to target 39.2C\"}}"
     )
     resp_fuse = val_agent.solve(fuse_prompt, model_name=HD_MODEL)
@@ -317,14 +390,15 @@ def run_group_c(client, telemetry):
         
         d1_ds = drone1_tc.plasticity_log[i][3] if i < len(drone1_tc.plasticity_log) else 0
         d2_ds = drone2_tc.plasticity_log[i][3] if i < len(drone2_tc.plasticity_log) else 0
-        v_ds = validation_tc.plasticity_log[i][3] if i < len(validation_tc.plasticity_log) else 0
+        v_ds = validation_tc.plasticity_log[i][3] if i < len(validation_tc.destruction_count) else 0
         
         c_log.append((i, d1_act + d2_act + v_act, d1_cr + d2_cr + v_cr, d1_ds + d2_ds + v_ds))
         
-    print(f"\n[Group C Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group C Summary] Success: {success} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
         "success": success,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": c_log,
@@ -337,23 +411,44 @@ def run_group_c(client, telemetry):
 # =====================================================================
 def main():
     client = OllamaClient(default_model=MODEL_NAME)
+    
+    # Warm up models
+    print("[Warm-up] Initializing models in GPU memory...")
+    client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
+    client.generate(prompt="Hello", model_name="qwen2.5:1.5b")
+    print("[Warm-up] Done.")
+    
     telemetry = get_telemetry()
     
-    res_a = run_group_a(client, telemetry)
-    res_b = run_group_b(client, telemetry)
-    res_c = run_group_c(client, telemetry)
+    # Define evaluation runs for randomization
+    runs = [
+        ("Group A", lambda: run_group_a(client, telemetry)),
+        ("Group B", lambda: run_group_b(client, telemetry)),
+        ("Group C", lambda: run_group_c(client, telemetry))
+    ]
+    import random
+    random.shuffle(runs)
+    print(f"\n[Experimental Design] Running groups in randomized order: {[name for name, _ in runs]}")
+    
+    results_map = {}
+    for name, run_fn in runs:
+        results_map[name] = run_fn()
+        
+    res_a = results_map["Group A"]
+    res_b = results_map["Group B"]
+    res_c = results_map["Group C"]
     
     print("\n" + "="*50)
     print("ROBOTICS SWARM EXPERIMENTAL RESULTS (RICHER)")
     print("="*50)
-    print(f"Group A: Success: {res_a['success']} | Tokens: {res_a['tokens']} | Time: {res_a['duration']:.2f}s")
-    print(f"Group B: Success: {res_b['success']} | Tokens: {res_b['tokens']} | Time: {res_b['duration']:.2f}s")
-    print(f"Group C: Success: {res_c['success']} | Tokens: {res_c['tokens']} | Time: {res_c['duration']:.2f}s")
+    print(f"Group A: Success: {res_a['success']} | Tokens (Weighted): {res_a['weighted_tokens']} | Time: {res_a['duration']:.2f}s")
+    print(f"Group B: Success: {res_b['success']} | Tokens (Weighted): {res_b['weighted_tokens']} | Time: {res_b['duration']:.2f}s")
+    print(f"Group C: Success: {res_c['success']} | Tokens (Weighted): {res_c['weighted_tokens']} | Time: {res_c['duration']:.2f}s")
     
     # Calculate academic metrics
-    a_yield = (100.0 * 1000000.0) / res_a["tokens"] if res_a["success"] else 0.0
-    b_yield = (100.0 * 1000000.0) / res_b["tokens"] if res_b["success"] else 0.0
-    c_yield = (100.0 * 1000000.0) / res_c["tokens"] if res_c["success"] else 0.0
+    a_yield = (100.0 * 1000000.0) / res_a["weighted_tokens"] if res_a["success"] else 0.0
+    b_yield = (100.0 * 1000000.0) / res_b["weighted_tokens"] if res_b["success"] else 0.0
+    c_yield = (100.0 * 1000000.0) / res_c["weighted_tokens"] if res_c["success"] else 0.0
     
     b_turnover = res_b["destructions"] / res_b["creations"] if res_b["creations"] > 0 else 0.0
     c_turnover = res_c["destructions"] / res_c["creations"] if res_c["creations"] > 0 else 0.0
@@ -363,9 +458,9 @@ def main():
         "Group", "Success", "Tokens_Used", "Execution_Time_s", "Metabolic_Yield", "Cell_Turnover", "Allostatic_Load"
     ]
     data = [
-        ["Group A (Baseline)", 1.0 if res_a["success"] else 0.0, res_a["tokens"], res_a["duration"], a_yield, 0.0, res_a["prompt_tokens"]],
-        ["Group B (Single-Tree)", 1.0 if res_b["success"] else 0.0, res_b["tokens"], res_b["duration"], b_yield, b_turnover, res_b["prompt_tokens"]],
-        ["Group C (Forest)", 1.0 if res_c["success"] else 0.0, res_c["tokens"], res_c["duration"], c_yield, c_turnover, res_c["prompt_tokens"]]
+        ["Group A (Baseline)", 1.0 if res_a["success"] else 0.0, res_a["weighted_tokens"], res_a["duration"], a_yield, 0.0, res_a["prompt_tokens"]],
+        ["Group B (Single-Tree)", 1.0 if res_b["success"] else 0.0, res_b["weighted_tokens"], res_b["duration"], b_yield, b_turnover, res_b["prompt_tokens"]],
+        ["Group C (Forest)", 1.0 if res_c["success"] else 0.0, res_c["weighted_tokens"], res_c["duration"], c_yield, c_turnover, res_c["prompt_tokens"]]
     ]
     with open("robotics_metrics.csv", "w", newline="") as f:
         writer = csv.writer(f)

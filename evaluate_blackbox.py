@@ -64,48 +64,89 @@ def run_group_a(client, api, challenge):
     client.reset_stats()
     
     start_time = time.time()
+    consecutive_failures = 0
+    current_model = MODEL_NAME
+    
+    system_prompt = (
+        "You are an API reverse-engineering specialist. You solve encoding challenges "
+        "by writing Python scripts that analyze API hints and test inputs to deduce rules."
+    )
     
     agent_prompt = (
         f"You need to query a black-box API and return the secret access key.\n"
         f"To get the key, you must submit the correct encoded payload for the challenge: '{challenge}'.\n"
-        f"You must output ONLY your candidate payload inside a JSON block at the end:\n"
-        f"{{\"candidate_payload\": \"your_payload_here\"}}"
+        f"Write a Python script that imports BlackBoxAPI, queries hints (by submitting incorrect payloads), "
+        f"analyzes the mathematical mapping (character shifts, index increments, reversal), "
+        f"computes the correct payload for '{challenge}', and prints 'SOLVED_PAYLOAD: <your_payload>'.\n"
+        f"Output ONLY your Python script inside a ```python block."
     )
     
     print(f"[Group A] Received Challenge: '{challenge}'")
-    resp = client.generate(prompt=agent_prompt, system_prompt=None, temperature=0.7, model_name=MODEL_NAME)
-    payload = parse_candidate(resp["text"])
-    print(f"  [Attempt 1] Payload: '{payload}'")
     
-    res = api.submit(challenge, payload)
+    res = {"success": False, "message": "No code run yet."}
+    history = []
     
-    # Retry loop representing typical sequential guessing attempts
-    for attempt in range(2, 5):
-        if res["success"]:
-            break
-        print(f"  [Attempt {attempt-1} Failed] API Message: {res['message']} | Hint: {res.get('hint')}")
+    for attempt in range(1, 4):
+        # Upgrade logic (Tissue Isolation symmetry)
+        if consecutive_failures >= 2:
+            if current_model != HIGH_DENSITY_MODEL:
+                print(f"[Group A] [TISSUE ISOLATION] Spawning virgin solver on high-density model '{HIGH_DENSITY_MODEL}' due to stress.")
+                current_model = HIGH_DENSITY_MODEL
+                # Clear history for virgin solver clean slate
+                history = []
+        else:
+            current_model = MODEL_NAME
+            
+        if attempt == 1 or not history:
+            current_prompt = agent_prompt
+        else:
+            current_prompt = (
+                f"Previous Code Attempt History:\n" +
+                "\n".join([f"Attempt {i+1} Script output/errors: {err}" for i, err in enumerate(history)]) +
+                f"\n\nTask: Correct the script and write a new Python script to solve challenge '{challenge}'.\n"
+                f"Output your Python code inside a ```python block."
+            )
+            
+        resp = client.generate(prompt=current_prompt, system_prompt=system_prompt, temperature=0.7, model_name=current_model)
+        script_code = extract_python_code(resp["text"])
         
-        retry_prompt = (
-            f"Your previous attempt failed.\n"
-            f"API Error: {res['message']}\n"
-            f"API Hint: {res.get('hint')}\n"
-            f"Deduce the encryption rule and output your next candidate payload in JSON format:\n"
-            f"{{\"candidate_payload\": \"your_payload_here\"}}"
-        )
-        resp = client.generate(prompt=retry_prompt, system_prompt=None, temperature=0.7, model_name=MODEL_NAME)
-        payload = parse_candidate(resp["text"])
-        print(f"  [Attempt {attempt}] Payload: '{payload}'")
-        res = api.submit(challenge, payload)
+        print(f"  [Attempt {attempt}] Running generated Python script locally...")
+        success_run, stdout, stderr = run_generated_script(script_code, f"scratch/probe_a_{attempt}.py")
+        
+        feedback = ""
+        if success_run:
+            match = re.search(r"SOLVED_PAYLOAD:\s*(\S+)", stdout)
+            if match:
+                payload = match.group(1)
+                print(f"  [Attempt {attempt}] Extracted payload: '{payload}'")
+                res = api.submit(challenge, payload)
+                feedback = f"Script stdout: {stdout.strip()} | API response: {res['message']}"
+                if res["success"]:
+                    print(f"  [Attempt {attempt}] Success!")
+                    break
+            else:
+                feedback = f"Script ran but did not print 'SOLVED_PAYLOAD: <payload>'. Stdout: {stdout.strip()}"
+        else:
+            feedback = f"Script error: {stderr}"
+            
+        print(f"  [Attempt {attempt} Failed] Feedback: {feedback}")
+        history.append(feedback)
+        
+        if res["success"]:
+            consecutive_failures = 0
+        else:
+            consecutive_failures += 1
+            
         time.sleep(0.5)
         
     duration = time.time() - start_time
     stats = client.get_stats()
     
-    print(f"\n[Group A Summary] Success: {res['success']} | Key: {res.get('key', 'None')} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group A Summary] Success: {res['success']} | Key: {res.get('key', 'None')} | Tokens: {stats['weighted_tokens']} (Weighted), Time: {duration:.2f}s")
     return {
         "success": res["success"],
         "key": res.get("key"),
-        "tokens": stats["total_tokens"],
+        "tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration
     }
@@ -214,38 +255,23 @@ def run_group_b(client, api, challenge):
         virgin = tc.create_agent("virgin_solver", "You are a specialized code generator.")
         tc.log_plasticity(3)
         
-        # Hipermutação Estruturada: Force writing python script to deduce math rule
-        hypermutation_prompt = (
+        # Hipermutação Estruturada: Force writing python script to deduce math rul        hypermutation_prompt = (
             f"WARNING: HIGH METABOLIC STRESS ENGAGED.\n"
             f"Write a Python script that reverse-engineers the BlackBoxAPI logic and prints the encoded version of '{challenge}'.\n"
-            f"You MUST use this template script, completing the code block inside it:\n\n"
+            f"You must write code to query hints, analyze the mapping dynamically (shifts, indices, reversal), and encode the challenge.\n"
+            f"Use this basic import structure:\n\n"
             f"```python\n"
             f"from blackbox_api import BlackBoxAPI\n"
             f"import re\n"
             f"\n"
-            f"def get_expected(api, text):\n"
-            f"    res = api.submit(text, 'dummy')\n"
-            f"    hint = res.get('hint', '')\n"
-            f"    m = re.search(r\"payload is '(.*?)'\", hint)\n"
-            f"    return m.group(1) if m else ''\n"
-            f"\n"
             f"api = BlackBoxAPI()\n"
-            f"# Query reference word 'a'\n"
-            f"encoded_a = get_expected(api, 'a')\n"
-            f"# 'a' is ASCII 97. If encoded_a is 'h' (ASCII 104), shift offset is 104 - 97 = 7.\n"
-            f"offset = ord(encoded_a) - 97 if encoded_a else 7\n"
-            f"\n"
-            f"def encode(text, offset_val):\n"
-            f"    shifted = []\n"
-            f"    for i, c in enumerate(text):\n"
-            f"        shifted.append(chr((ord(c) + offset_val + i) % 256))\n"
-            f"    return ''.join(shifted)[::-1]\n"
-            f"\n"
-            f"payload = encode('{challenge}', offset)\n"
-            f"print('SOLVED_PAYLOAD:', payload)\n"
+            f"# Test reference strings (e.g. 'a', 'ab', 'abc') using api.submit(text, 'dummy')\n"
+            f"# to extract expected payloads from response hints. Analyze character shifts.\n"
+            f"# Calculate the correct payload for '{challenge}' and print it:\n"
+            f"# print('SOLVED_PAYLOAD:', payload)\n"
             f"```\n\n"
-            f"Output the Python code exactly inside a ```python block."
-        )
+            f"Output the Python code inside a ```python block."
+        ) )
         
         resp = virgin.solve(hypermutation_prompt, model_name=HIGH_DENSITY_MODEL, temp=0.6, max_tokens=1000)
         script_code = extract_python_code(resp["text"])
@@ -268,12 +294,12 @@ def run_group_b(client, api, challenge):
     duration = time.time() - start_time
     stats = client.get_stats()
     
-    print(f"\n[Group B Summary] Success: {res['success']} | Key: {res.get('key', 'None')} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group B Summary] Success: {res['success']} | Key: {res.get('key', 'None')} | Tokens: {stats['weighted_tokens']} (Weighted), Time: {duration:.2f}s")
     tc.log_plasticity(4)
     return {
         "success": res["success"],
         "key": res.get("key"),
-        "tokens": stats["total_tokens"],
+        "tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": tc.plasticity_log,
@@ -358,23 +384,11 @@ def run_group_c(client, api, challenge):
     pairs_str = "\n".join([f"- Input: '{inp}' -> Output: '{out}'" for inp, out in pairs])
     analysis_prompt = (
         f"We have gathered these challenge-response pairs from a black-box API:\n{pairs_str}\n\n"
-        f"Analyze the character mapping: find the shift offset.\n"
-        f"For input 'a' (ASCII 97), the output is '{api.encode_correctly('a')}'. Calculate the offset.\n"
-        f"Write a Python script that defines the encoding logic and prints the solved payload for challenge '{challenge}'.\n"
-        f"You MUST use this template and fill in the offset value:\n\n"
-        f"```python\n"
-        f"def encode(text, offset_val):\n"
-        f"    shifted = []\n"
-        f"    for i, c in enumerate(text):\n"
-        f"        shifted.append(chr((ord(c) + offset_val + i) % 256))\n"
-        f"    return ''.join(shifted)[::-1]\n"
-        f"\n"
-        f"# Shift offset: 'a' -> '{api.encode_correctly('a')}' is shift of 7\n"
-        f"offset = 7\n"
-        f"payload = encode('{challenge}', offset)\n"
-        f"print('SOLVED_PAYLOAD:', payload)\n"
-        f"```\n\n"
-        f"Output code in a ```python block."
+        f"Analyze the character mapping between the input strings and output strings.\n"
+        f"Write a Python script that deduces the transformation rule (taking into account character shifts, position-based additions, and string reversal) "
+        f"and computes the solved payload for challenge '{challenge}'.\n"
+        f"Your script must print 'SOLVED_PAYLOAD: <payload>'.\n"
+        f"Output your Python code inside a ```python block."
     )
     
     resp_analysis = analyst.solve(analysis_prompt, model_name=HIGH_DENSITY_MODEL, temp=0.3)
@@ -427,7 +441,7 @@ def run_group_c(client, api, challenge):
     return {
         "success": res["success"],
         "key": res.get("key"),
-        "tokens": stats["total_tokens"],
+        "tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": c_log,
@@ -478,10 +492,29 @@ def main():
     # Generate target challenge
     challenge = api.generate_challenge()
     
-    # Run tests
-    res_a = run_group_a(client, api, challenge)
-    res_b = run_group_b(client, api, challenge)
-    res_c = run_group_c(client, api, challenge)
+    # Warm up models
+    print("[Warm-up] Initializing models in GPU memory...")
+    client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
+    client.generate(prompt="Hello", model_name="qwen2.5:1.5b")
+    print("[Warm-up] Done.")
+
+    # Run tests in randomized order
+    runs = [
+        ("Group A", lambda: run_group_a(client, api, challenge)),
+        ("Group B", lambda: run_group_b(client, api, challenge)),
+        ("Group C", lambda: run_group_c(client, api, challenge))
+    ]
+    import random
+    random.shuffle(runs)
+    print(f"\n[Experimental Design] Running groups in randomized order: {[name for name, _ in runs]}")
+    
+    results_map = {}
+    for name, run_fn in runs:
+        results_map[name] = run_fn()
+        
+    res_a = results_map["Group A"]
+    res_b = results_map["Group B"]
+    res_c = results_map["Group C"]
     
     # Output metrics
     print("\n" + "="*50)

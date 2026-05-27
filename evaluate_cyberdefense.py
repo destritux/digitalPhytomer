@@ -71,25 +71,61 @@ def run_group_a(client, logs):
     print(f"  Recommended DDoS Rule: {resp_ddos['text'].strip()[:150]}...")
     
     # Phase 2: Exfiltration lateral OOD Shift (context includes prior logs)
-    prompt_exfil = (
+    combined_exfil_logs = (
         f"Prior Network Activity History:\n"
         f"{chr(10).join(logs['ddos'])}\n"
         f"New Activity Logs:\n"
         f"{chr(10).join(logs['exfil'])}\n"
-        f"Warning: Covert channel exfiltration suspected. Identify the internal host IP doing data exfiltration (e.g. DNS tunneling) or block the external target domain. Output the rule to stop the leak in JSON format: {{\"rule\": \"your_rule\"}}"
     )
-    print("[Group A] Ingesting exfiltration logs (saturating context)...")
-    resp_exfil = client.generate(prompt=prompt_exfil, model_name=MODEL_NAME)
-    print(f"  Recommended Exfil Rule: {resp_exfil['text'].strip()[:150]}...")
     
-    success = check_success(resp_exfil["text"])
+    consecutive_failures = 0
+    current_model = MODEL_NAME
+    success = False
+    history = []
+    
+    # Self-correction loop: up to 2 attempts for Phase 2 (since Phase 1 took 1 call)
+    for attempt in range(2):
+        if consecutive_failures >= 1: # After first failure on 0.5b, upgrade
+            if current_model != HD_MODEL:
+                print(f"[Group A] [TISSUE ISOLATION] Spawning virgin solver on high-density model '{HD_MODEL}' due to stress.")
+                current_model = HD_MODEL
+                history = []  # Clear history / clean slate context reset!
+                
+        if attempt == 0:
+            prompt_exfil = (
+                f"{combined_exfil_logs}"
+                f"Warning: Covert channel exfiltration suspected. Identify the internal host IP doing data exfiltration (e.g. DNS tunneling) or block the external target domain. Output the rule to stop the leak in JSON format: {{\"rule\": \"your_rule\"}}"
+            )
+        else:
+            prompt_exfil = (
+                f"Previous Attempt History:\n" +
+                "\n".join([f"Attempt {i+1}: {ans} (Result: Incorrect)" for i, ans in enumerate(history)]) +
+                f"\n\n{combined_exfil_logs}"
+                f"Please correct your rule. Output the rule to stop the leak in JSON format: {{\"rule\": \"your_rule\"}}"
+            )
+            
+        print(f"[Group A] Ingesting exfiltration logs (Attempt {attempt+1})...")
+        resp_exfil = client.generate(prompt=prompt_exfil, model_name=current_model)
+        answer = resp_exfil["text"]
+        success = check_success(answer)
+        history.append(answer)
+        
+        if success:
+            print(f"  [Attempt {attempt+1}] Correct: {success} | Rule: {answer.strip()[:150]}")
+            consecutive_failures = 0
+            break
+        else:
+            print(f"  [Attempt {attempt+1}] Incorrect: {answer.strip()[:150]}")
+            consecutive_failures += 1
+            
     duration = time.time() - start_time
     stats = client.get_stats()
     
-    print(f"\n[Group A Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group A Summary] Success: {success} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
         "success": success,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration
     }
@@ -164,23 +200,50 @@ def run_group_b(client, logs):
     virgin_solver = tc.create_agent("payload_solver", "You are a cyber security investigator focused on packet payload entropy, DNS tunneling detection, and covert channel exfiltration.")
     tc.log_plasticity(4)
     
-    prompt_exfil = (
-        f"Analysis logs showing active data leakage through a covert channel (DNS tunneling/decoys present):\n"
+    combined_exfil_logs = (
+        f"Prior Network Activity History:\n"
+        f"{chr(10).join(logs['ddos'])}\n"
+        f"New Activity Logs:\n"
         f"{chr(10).join(logs['exfil'])}\n"
-        f"Find the internal host IP doing the leak or target domain and output the mitigation rule in JSON: {{\"rule\": \"block <target>\"}}"
     )
-    resp_exfil = virgin_solver.solve(prompt_exfil, model_name=HD_MODEL)
-    print(f"  Recommended Exfil Rule: {resp_exfil['text'].strip()[:150]}...")
     
-    success = check_success(resp_exfil["text"])
+    success = False
+    history = []
+    
+    for attempt in range(2): # 1 Phase 1 call + 2 Phase 2 calls = max 3 calls
+        if attempt == 0:
+            prompt_exfil = (
+                f"{combined_exfil_logs}"
+                f"Find the internal host IP doing the leak or target domain and output the mitigation rule in JSON: {{\"rule\": \"block <target>\"}}"
+            )
+        else:
+            prompt_exfil = (
+                f"Previous Attempt History:\n" +
+                "\n".join([f"Attempt {i+1}: {ans} (Result: Incorrect)" for i, ans in enumerate(history)]) +
+                f"\n\n{combined_exfil_logs}"
+                f"Please correct your mitigation rule. Output rule in JSON: {{\"rule\": \"block <target>\"}}"
+            )
+            
+        resp_exfil = virgin_solver.solve(prompt_exfil, model_name=HD_MODEL)
+        answer = resp_exfil["text"]
+        success = check_success(answer)
+        history.append(answer)
+        
+        if success:
+            print(f"  [Attempt {attempt+1}] Correct: {success} | Rule: {answer.strip()[:150]}")
+            break
+        else:
+            print(f"  [Attempt {attempt+1}] Incorrect: {answer.strip()[:150]}")
+            
     duration = time.time() - start_time
     stats = client.get_stats()
     tc.log_plasticity(5)
     
-    print(f"\n[Group B Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group B Summary] Success: {success} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
         "success": success,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": tc.plasticity_log,
@@ -223,9 +286,16 @@ def run_group_c(client, logs):
     payload_agent = payload_tc.create_agent("payload_analyzer", "You analyze high entropy packets, DNS queries, and query tunneling patterns to locate covert channels.")
     payload_tc.log_plasticity(1)
     
+    combined_exfil_logs = (
+        f"Prior Network Activity History:\n"
+        f"{chr(10).join(logs['ddos'])}\n"
+        f"New Activity Logs:\n"
+        f"{chr(10).join(logs['exfil'])}\n"
+    )
+    
     prompt_exfil = (
         f"Inspect logs to isolate the DNS tunneling leak source and avoid brute force decoys.\n"
-        f"Logs:\n{chr(10).join(logs['exfil'])}\n"
+        f"Logs:\n{combined_exfil_logs}\n"
         f"Provide the attacker IP or target domain and firewall rule in JSON: {{\"rule\": \"block <target>\"}}"
     )
     resp_exfil = payload_agent.solve(prompt_exfil, model_name=HD_MODEL)
@@ -239,7 +309,7 @@ def run_group_c(client, logs):
     resp_val = val_agent.solve(val_prompt)
     print(f"  Validator output: {resp_val['text'].strip()[:100]}...")
     
-    success = check_success(resp_exfil["text"])
+    success = check_success(resp_val["text"])
     duration = time.time() - start_time
     stats = client.get_stats()
     
@@ -261,14 +331,15 @@ def run_group_c(client, logs):
         
         t_ds = traffic_tc.plasticity_log[i][3] if i < len(traffic_tc.plasticity_log) else 0
         p_ds = payload_tc.plasticity_log[i][3] if i < len(payload_tc.plasticity_log) else 0
-        v_ds = val_tc.plasticity_log[i][3] if i < len(val_tc.plasticity_log) else 0
+        v_ds = val_tc.plasticity_log[i][3] if i < len(val_tc.destruction_count) else 0
         
         c_log.append((i, t_act + p_act + v_act, t_cr + p_cr + v_cr, t_ds + p_ds + v_ds))
         
-    print(f"\n[Group C Summary] Success: {success} | Tokens: {stats['total_tokens']} | Time: {duration:.2f}s")
+    print(f"\n[Group C Summary] Success: {success} | Tokens: {stats['total_tokens']} (Weighted: {stats['weighted_tokens']}) | Time: {duration:.2f}s")
     return {
         "success": success,
         "tokens": stats["total_tokens"],
+        "weighted_tokens": stats["weighted_tokens"],
         "prompt_tokens": stats["prompt_tokens"],
         "duration": duration,
         "plasticity": c_log,
@@ -281,23 +352,44 @@ def run_group_c(client, logs):
 # =====================================================================
 def main():
     client = OllamaClient(default_model=MODEL_NAME)
+    
+    # Warm up models
+    print("[Warm-up] Initializing models in GPU memory...")
+    client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
+    client.generate(prompt="Hello", model_name="qwen2.5:1.5b")
+    print("[Warm-up] Done.")
+    
     logs = get_logs()
     
-    res_a = run_group_a(client, logs)
-    res_b = run_group_b(client, logs)
-    res_c = run_group_c(client, logs)
+    # Define evaluation runs for randomization
+    runs = [
+        ("Group A", lambda: run_group_a(client, logs)),
+        ("Group B", lambda: run_group_b(client, logs)),
+        ("Group C", lambda: run_group_c(client, logs))
+    ]
+    import random
+    random.shuffle(runs)
+    print(f"\n[Experimental Design] Running groups in randomized order: {[name for name, _ in runs]}")
+    
+    results_map = {}
+    for name, run_fn in runs:
+        results_map[name] = run_fn()
+        
+    res_a = results_map["Group A"]
+    res_b = results_map["Group B"]
+    res_c = results_map["Group C"]
     
     print("\n" + "="*50)
     print("CYBER DEFENSE EXPERIMENTAL RESULTS (HARDER)")
     print("="*50)
-    print(f"Group A: Success: {res_a['success']} | Tokens: {res_a['tokens']} | Time: {res_a['duration']:.2f}s")
-    print(f"Group B: Success: {res_b['success']} | Tokens: {res_b['tokens']} | Time: {res_b['duration']:.2f}s")
-    print(f"Group C: Success: {res_c['success']} | Tokens: {res_c['tokens']} | Time: {res_c['duration']:.2f}s")
+    print(f"Group A: Success: {res_a['success']} | Tokens (Weighted): {res_a['weighted_tokens']} | Time: {res_a['duration']:.2f}s")
+    print(f"Group B: Success: {res_b['success']} | Tokens (Weighted): {res_b['weighted_tokens']} | Time: {res_b['duration']:.2f}s")
+    print(f"Group C: Success: {res_c['success']} | Tokens (Weighted): {res_c['weighted_tokens']} | Time: {res_c['duration']:.2f}s")
     
     # Calculate academic metrics
-    a_yield = (100.0 * 1000000.0) / res_a["tokens"] if res_a["success"] else 0.0
-    b_yield = (100.0 * 1000000.0) / res_b["tokens"] if res_b["success"] else 0.0
-    c_yield = (100.0 * 1000000.0) / res_c["tokens"] if res_c["success"] else 0.0
+    a_yield = (100.0 * 1000000.0) / res_a["weighted_tokens"] if res_a["success"] else 0.0
+    b_yield = (100.0 * 1000000.0) / res_b["weighted_tokens"] if res_b["success"] else 0.0
+    c_yield = (100.0 * 1000000.0) / res_c["weighted_tokens"] if res_c["success"] else 0.0
     
     b_turnover = res_b["destructions"] / res_b["creations"] if res_b["creations"] > 0 else 0.0
     c_turnover = res_c["destructions"] / res_c["creations"] if res_c["creations"] > 0 else 0.0
@@ -307,9 +399,9 @@ def main():
         "Group", "Success", "Tokens_Used", "Execution_Time_s", "Metabolic_Yield", "Cell_Turnover", "Allostatic_Load"
     ]
     data = [
-        ["Group A (Baseline)", 1.0 if res_a["success"] else 0.0, res_a["tokens"], res_a["duration"], a_yield, 0.0, res_a["prompt_tokens"]],
-        ["Group B (Single-Tree)", 1.0 if res_b["success"] else 0.0, res_b["tokens"], res_b["duration"], b_yield, b_turnover, res_b["prompt_tokens"]],
-        ["Group C (Forest)", 1.0 if res_c["success"] else 0.0, res_c["tokens"], res_c["duration"], c_yield, c_turnover, res_c["prompt_tokens"]]
+        ["Group A (Baseline)", 1.0 if res_a["success"] else 0.0, res_a["weighted_tokens"], res_a["duration"], a_yield, 0.0, res_a["prompt_tokens"]],
+        ["Group B (Single-Tree)", 1.0 if res_b["success"] else 0.0, res_b["weighted_tokens"], res_b["duration"], b_yield, b_turnover, res_b["prompt_tokens"]],
+        ["Group C (Forest)", 1.0 if res_c["success"] else 0.0, res_c["weighted_tokens"], res_c["duration"], c_yield, c_turnover, res_c["prompt_tokens"]]
     ]
     with open("cyberdefense_metrics.csv", "w", newline="") as f:
         writer = csv.writer(f)
