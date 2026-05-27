@@ -75,9 +75,10 @@ def run_group_a(client, api, challenge):
     agent_prompt = (
         f"You need to query a black-box API and return the secret access key.\n"
         f"To get the key, you must submit the correct encoded payload for the challenge: '{challenge}'.\n"
-        f"Write a Python script that imports BlackBoxAPI, queries hints (by submitting incorrect payloads), "
+        f"Write a Python script that imports BlackBoxAPI from blackbox_api directly, queries hints (by submitting incorrect payloads), "
         f"analyzes the mathematical mapping (character shifts, index increments, reversal), "
         f"computes the correct payload for '{challenge}', and prints 'SOLVED_PAYLOAD: <your_payload>'.\n"
+        f"Use this import statement: from blackbox_api import BlackBoxAPI\n"
         f"Output ONLY your Python script inside a ```python block."
     )
     
@@ -255,7 +256,8 @@ def run_group_b(client, api, challenge):
         virgin = tc.create_agent("virgin_solver", "You are a specialized code generator.")
         tc.log_plasticity(3)
         
-        # Hipermutação Estruturada: Force writing python script to deduce math rul        hypermutation_prompt = (
+        # Hipermutação Estruturada: Force writing python script to deduce math rule
+        hypermutation_prompt = (
             f"WARNING: HIGH METABOLIC STRESS ENGAGED.\n"
             f"Write a Python script that reverse-engineers the BlackBoxAPI logic and prints the encoded version of '{challenge}'.\n"
             f"You must write code to query hints, analyze the mapping dynamically (shifts, indices, reversal), and encode the challenge.\n"
@@ -271,7 +273,7 @@ def run_group_b(client, api, challenge):
             f"# print('SOLVED_PAYLOAD:', payload)\n"
             f"```\n\n"
             f"Output the Python code inside a ```python block."
-        ) )
+        )
         
         resp = virgin.solve(hypermutation_prompt, model_name=HIGH_DENSITY_MODEL, temp=0.6, max_tokens=1000)
         script_code = extract_python_code(resp["text"])

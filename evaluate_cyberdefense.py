@@ -331,7 +331,7 @@ def run_group_c(client, logs):
         
         t_ds = traffic_tc.plasticity_log[i][3] if i < len(traffic_tc.plasticity_log) else 0
         p_ds = payload_tc.plasticity_log[i][3] if i < len(payload_tc.plasticity_log) else 0
-        v_ds = val_tc.plasticity_log[i][3] if i < len(val_tc.destruction_count) else 0
+        v_ds = val_tc.plasticity_log[i][3] if i < len(val_tc.plasticity_log) else 0
         
         c_log.append((i, t_act + p_act + v_act, t_cr + p_cr + v_cr, t_ds + p_ds + v_ds))
         

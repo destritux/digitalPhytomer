@@ -390,7 +390,7 @@ def run_group_c(client, telemetry):
         
         d1_ds = drone1_tc.plasticity_log[i][3] if i < len(drone1_tc.plasticity_log) else 0
         d2_ds = drone2_tc.plasticity_log[i][3] if i < len(drone2_tc.plasticity_log) else 0
-        v_ds = validation_tc.plasticity_log[i][3] if i < len(validation_tc.destruction_count) else 0
+        v_ds = validation_tc.plasticity_log[i][3] if i < len(validation_tc.plasticity_log) else 0
         
         c_log.append((i, d1_act + d2_act + v_act, d1_cr + d2_cr + v_cr, d1_ds + d2_ds + v_ds))
         
