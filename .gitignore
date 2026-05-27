@@ -5,3 +5,6 @@ __pycache__/
 .gemini/
 *~
 *.log
+*.csv
+*.png
+*.docx
