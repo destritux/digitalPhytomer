@@ -1,4 +1,5 @@
 results/
+scratch/
 .venv/
 __pycache__/
 *.pyc
