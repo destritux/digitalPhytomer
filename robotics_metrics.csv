@@ -1,0 +1,4 @@
+Group,Success,Tokens_Used,Execution_Time_s,Metabolic_Yield,Cell_Turnover,Allostatic_Load
+Group A (Baseline),0.0,1949,4.133449077606201,0.0,0.0,1309
+Group B (Single-Tree),1.0,2491,13.231544971466064,40144.520272982736,0.6666666666666666,431
+Group C (Forest),1.0,2932,14.619426727294922,34106.41200545702,0.4,445

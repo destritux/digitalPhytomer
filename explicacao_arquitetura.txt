@@ -1,0 +1,108 @@
+EXPLANATION OF THE BIO-INSPIRED ARCHITECTURE: "DIGITAL PHYTOMER"
+
+Este documento descreve detalhadamente a arquitetura holárquica e bioinspirada desenvolvida para o ecossistema de agentes "Digital Phytomer". Em vez de seguir a ordem dos arquivos de código, esta análise apresenta as funções segundo o fluxo operacional de processamento cognitivo, relacionando os termos técnicos aos conceitos botânicos e às teorias de inteligência coletiva e fisiologia vegetal.
+
+---
+
+1. FUNDAMENTOS TEÓRICOS E A METÁFORA BOTÂNICA
+
+O sistema adota o conceito de Holarquia (Koestler, 1967), onde cada elemento é simultaneamente um todo em si mesmo e parte de um sistema maior. 
+
+* Micro-Agente (MA) / Fitômero (Phytomer): Na botânica, o fitômero é a unidade básica de crescimento do caule, constituída por um nó, um entrenó, uma folha e uma gema axilar (Bell, 2008). No sistema, cada MicroAgent ou REAgent representa um fitômero: uma unidade autônoma básica equipada com diretrizes (DNA), capacidade de entrada/saída (folha) e potencial de replicação ou diferenciação (gema).
+* Tree Controller (TC) / Caule e Sistema Vascular: O caule unifica os fitômeros. O TreeController ou RETreeController atua como este elo físico e de recursos. Ele gerencia o fluxo de energia (metabolismo), distribui sinais regulatórios e sustenta a memória epigenética local (vascularização).
+* Forest Controller (FC) / Ecossistema Florestal: Representa a floresta integrada. O ForestController governa múltiplos TCs, intermediando o contato com o mundo externo, agindo como barreira imunológica (Restriction Genome) e resolvendo conflitos sistêmicos de distribuição de recursos ou domínios de conhecimento (simbiose).
+
+---
+
+2. FLUXO OPERACIONAL E MAPEAMENTO DE FUNÇÕES
+
+Fase 1: Entrada no Portal e Regulação Genômica (Os Estômatos e a Parede Celular)
+
+Todo estímulo ambiental entra no sistema através do ForestController, que regula as interfaces entre o ambiente externo e os domínios internos da planta.
+
+* ForestController.submit_task(self, domain, problem, verifier_fn, time_step) (e submit_task em ReverseEngForestController):
+  - Função Botânica: Representa a absorção estomática de CO2 ou água do ecossistema. 
+  - Operação: É a API Gateway do sistema. Ele recebe uma tarefa, verifica a disponibilidade dos recursos (as árvores sob sua gestão) e encaminha o problema para a execução. Se múltiplas árvores especializadas estiverem configuradas (como no Grupo C, com as árvores Arithmetic, Geometric, e Validation), o FC atua como coordenador de fluxo, enviando a requisição para análise paralela e detectando conflitos sistêmicos.
+* ForestController.evaluate_restriction_genome(self, answer):
+  - Função Botânica: Parede Celular / Membrana Plasmática Seletiva.
+  - Operação: Filtro algorítmico rigoroso (Restriction Genome) que audita as respostas geradas. Ele garante que nenhuma mutação estocástica (alucinação) rompa os limites operacionais éticos ou de formato. O filtro impede vazamentos de tags de sistema, excesso de verbosidade ou markdown inválido antes de exportar a resposta ao ambiente externo.
+
+---
+
+Fase 2: Distribuição Vascular e Herança Epigenética (A Seiva Elaborada)
+
+Quando uma tarefa é delegada pelo FC a um TC, este inicia a busca por rotas metabólicas eficientes baseadas em experiências passadas.
+
+* TreeController.solve_task(self, problem, verifier_fn, time_step):
+  - Função Botânica: Transdução de Sinais e Regulação de Estresse Vascular.
+  - Operação: Gerencia a lógica de solução local. Antes de consumir energia ativando LLMs, ele avalia os hormônios de estresse do caule (rolling_history e consecutive_failures). Se o estresse estiver alto, ele modula a taxa de mutação sistêmica e, se necessário, ativa mecanismos drásticos de isolamento (Tissue Isolation).
+* SomaticVectorStore.query(self, query_embedding, limit, min_similarity):
+  - Função Botânica: Transmissão Epigenética Vascular.
+  - Operação: Consulta o banco de memória somática (SomaticVectorStore) usando a similaridade de cosseno de hashes textuais (Feature Hashing). Se encontrar um padrão idêntico com alta similaridade (>= 0.95), o sistema recupera a resposta instantaneamente (Recall Somático), poupando energia e evitando chamadas ao LLM. Isso emula a habituação de plantas (Gagliano et al., 2014), que evitam reações metabólicas complexas a estímulos familiares conhecidos.
+
+---
+
+Fase 3: Isolamento de Tecido Damificado e Hipermutação (Defesa por Abscisão e Plastídeos)
+
+Se o ambiente apresentar perturbações drásticas e consecutivas (mudança de paradigma ou erros contínuos), o caule reage isolando as células defeituosas e forçando o desenvolvimento de novas estruturas.
+
+* TreeController.solve_task (Bloco de Isolamento de Tecido):
+  - Função Botânica: Abscisão Fisiológica (Queda de Folhas Ineficientes) e Isolamento Celular.
+  - Operação: Se consecutive_failures >= 2, o sistema conclui que o tecido cognitivo atual está sofrendo de rigidez cognitiva (overfitting). O TC remove a energia do agente primário ineficiente (primary_solver.energy = 0), forçando seu descarte imediato via Garbage Collection.
+* TreeController.create_agent(self, role, system_prompt):
+  - Função Botânica: Diferenciação de Tecido Meristemático (Gema Apical).
+  - Operação: Spawna um novo agente. Se o isolamento de tecido estiver ativo, o TC bloqueia a injeção de contexto epigenético, criando um Virgin Solver (epigenetic inheritance blocked). Adicionalmente, este agente é alocado em um modelo de maior capacidade lógica (qwen2.5:1.5b) para lidar com a complexidade sob estresse.
+* MicroAgent.solve(self, problem, epigenetic_context, mutation_rate, model_name) (e REAgent.solve):
+  - Função Botânica: Fotossíntese Adaptativa sob Estresse e Hipermutação.
+  - Operação: Executa a inferência. Se a taxa de estresse estiver crítica, ativa a Hipermutação Estruturada: reduz a temperatura para 0.6 (preservando precisão sintática), limita os tokens para 100 ou 1000 (fail-fast metabólico) e altera a instrução para geração de código Python ou equações matemáticas interpretáveis. O agente passa a gerar hipóteses empíricas locais (scripts de teste) para validar a lógica em tempo de execução, emulando a exploração adaptativa de raízes em busca de nutrientes.
+
+---
+
+Fase 4: Mitigação e Síntese de Resolução (A Simbiose de Fitômeros)
+
+Se o agente individual falhar, o TC recruta uma equipe de fitômeros diferenciados para trabalhar em grupo (Assembly).
+
+* TreeController.solve_task (Bloco de Assembly):
+  - Função Botânica: Cooperação Simbiótica Intracelular.
+  - Operação: O TC instancia três agentes especializados: generator (propositor), critic (analisador de falhas) e aggregator (sintetizador). A interação circular entre esses três MAs emula o consenso bioquímico de regulação celular para consolidar uma resposta de confiança (>= 90%).
+* TreeController._parse_aggregator_response(self, text):
+  - Função Botânica: Síntese Hormonal de Resolução.
+  - Operação: Converte a resposta conversacional do agregador em dados estruturados (resposta final e taxa de confiança).
+
+---
+
+Fase 5: Metabolismo e Consolidação Fisiológica (Habituação de Sinapses e Limpeza de Resíduos)
+
+Após a tentativa de solução, o sistema precisa absorver o aprendizado, regular o consumo de energia dos agentes e limpar resíduos computacionais.
+
+* MicroAgent.adjust_energy(self, amount) (ou REAgent.energy):
+  - Função Botânica: Respiração Fisiológica e Metabolismo Primário.
+  - Operação: Penaliza ou recompensa os agentes. Acertos aumentam a energia vital; falhas seguidas reduzem a energia. Se chegar a zero, o agente morre fisiologicamente.
+* TreeController.monitor_agents(self):
+  - Função Botânica: Senescência e Decomposição de Resíduos (Garbage Collection).
+  - Operação: Pruna e exclui permanentemente os agentes mortos (com energia <= 0), liberando memória RAM e reduzindo o consumo ocioso de recursos da máquina.
+* SomaticVectorStore.apply_feedback(self, active_texts, success):
+  - Função Botânica: Fortalecimento Sináptico de Memória Somática.
+  - Operação: Recompensa os caminhos neurais. Se a tarefa foi resolvida com sucesso, aumenta o peso (weight) das memórias envolvidas (+0.1) e incrementa seus contadores de reforço (reinforcements). Se falhou, aplica uma penalidade de enfraquecimento moderada (*0.85).
+* SomaticVectorStore.apply_temporal_decay(self, active_texts):
+  - Função Botânica: Habituação e Curva de Esquecimento Fisiológica.
+  - Operação: Aplica decaimento temporal passivo apenas a vetores de memória inativos no ciclo atual. Para simular a habituação botânica, o decaimento é atenuado de acordo com o número de reforços:
+    Decaimento = 0.95 + 0.04 * min(1.0, reinforcements / 10)
+    Uma memória muito utilizada estabiliza e resiste ao esquecimento (decaimento próximo de 0.99), enquanto conceitos esquecidos caem abaixo do limiar crítico (0.25) e sofrem Pruning Sináptico em prune_low_weight_vectors().
+
+---
+
+Fase 6: Alostase (Recuperação Homeostática)
+
+* TreeController.trigger_allostasis(self):
+  - Função Botânica: Período Refratário / Sono Fisiológico.
+  - Operação: Reduz os hormônios de estresse acumulados no organismo celular. Ao término de um ciclo de perturbação e antes do teste de diagnóstico (retomada homeostática), redefine consecutive_failures = 0 e limpa o histórico de erros. Sem este período de calmaria (allostasis), o sistema permaneceria em estado de estresse crônico (Stress Hangover), bloqueando o acesso às memórias basais da planta.
+
+---
+
+3. REFERÊNCIAS ACADÊMICAS
+
+1. Koestler, A. (1967). The Ghost in the Machine. Penguin Group. (Holarquia e Holons auto-organizáveis).
+2. Bell, A. D. (2008). Plant Form: An Illustrated Guide to Flowering Plant Morphology. Timber Press. (Fitômeros e modularidade vegetal).
+3. Gagliano, M., et al. (2014). Experience teaches plants to learn: individual lay-off and habituation in Mimosa pudica. Oecologia, 175(1), 73-82. (Aprendizado somático e habituação botânica).
+4. McEwen, B. S. (1998). Protective and Damaging Effects of Stress Mediators: Allostasis and Allostatic Load. New England Journal of Medicine, 338, 171-179. (Alostase e homeostase).

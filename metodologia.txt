@@ -1,0 +1,174 @@
+================================================================================
+METODOLOGIA EXPERIMENTAL E ARQUITETURA COGNITIVA: DIGITAL PHYTOMER
+================================================================================
+
+Este documento descreve a metodologia científica aplicada para validar a tese de
+plasticidade ontogenética sob estresse metabólico na arquitetura multi-agente 
+bioinspirada "Digital Phytomer". Além disso, detalha o uso das bibliotecas de 
+código no ecossistema e as referências bibliográficas que embasam o design.
+
+--------------------------------------------------------------------------------
+1. INTRODUÇÃO E FUNDAMENTAÇÃO TEÓRICA (HIPÓTESE BOTÂNICA)
+--------------------------------------------------------------------------------
+
+Os Large Language Models (LLMs) monolíticos tradicionais sofrem de rigidez lúdica 
+ou cognitiva sob desvios de distribuição de dados (Out-of-Distribution - OOD) 
+e esquecimento catastrófico ao serem recalibrados para novas tarefas. A arquitetura 
+"Digital Phytomer" propõe uma solução baseada em dois conceitos biológicos:
+
+A. Fitômeros e Crescimento Modular (Bell, 2008): 
+   Plantas não possuem órgãos centrais únicos; elas crescem pela repetição de 
+   módulos autônomos denominados fitômeros (folha, nó, entrenó e gema axilar). 
+   Na arquitetura, cada resolvedor elementar é modelado como um Micro-Agente (MA) 
+   especializado que atua de forma autônoma dentro de tecidos maiores.
+
+B. Alostase, Habituação e Resiliência (McEwen, 1998; Gagliano et al., 2014):
+   Diferente da homeostase estática, a alostase descreve a capacidade de um 
+   organismo de manter a estabilidade por meio da mudança ativa, adaptando seus 
+   marcadores fisiológicos ao estresse crônico. Quando submetida a sobrecarga 
+   metabólica (erros sequenciais ou consumo excessivo de tokens), a arquitetura 
+   induz a abscisão (pruning de agentes de baixo desempenho) e a recuperação 
+   alostática (limpeza de seiva/contexto e reinicialização de solvers via 
+   mecanismos de allostasis).
+
+--------------------------------------------------------------------------------
+2. METODOLOGIA EXPERIMENTAL APLICADA
+--------------------------------------------------------------------------------
+
+A validação empírica consistiu em comparar três grupos experimentais em dois 
+estudos distintos sob condições controladas de ruído e quebra de paradigma:
+
+* Grupo A (Linha de Base Monolítica): Um agente único (LLM local qwen2.5:0.5b) 
+  sem memória vetorial compartilhada ou coordenação modular.
+* Grupo B (Holarquia de uma Árvore): Um Tree Controller gerenciando um único 
+  domínio de micro-agentes com suporte a vetor de memória somática local.
+* Grupo C (Floresta Ecológica): Um Forest Controller que atua como gateway 
+  e coordena simbioticamente três árvores especializadas: Arithmetic (para 
+  raciocínio linear), Geometric (raciocínio não-linear) e Validation (arbitragem 
+  e auditoria de consenso).
+
+Estudo 1: Raciocínio de Sequências Matemáticas com Paradigm Shift (OOD)
+Submetemos os agentes a um conjunto de 20 sequências numéricas (10 aritméticas, 
+seguidas por 10 geométricas) sob 30% de oclusão de dados (introduzindo '?'). 
+A transição súbita representa o desvio de distribuição (OOD). Ao final, aplicou-se 
+o teste de retenção (somatic recall) com limpeza de hormônios de estresse.
+
+Estudo 2: Engenharia Reversa de API Black-Box em Tempo Real
+Instanciação de um ambiente de API isolado que exige payloads criptografados 
+através de uma lógica matemática inédita (shifting circular + inversão de caracteres), 
+cujas pistas residem unicamente em cabeçalhos de erro HTTP. O sistema deve mapear a 
+regra oculta através de prospecções de entrada-saída e extrair a chave secreta.
+
+--------------------------------------------------------------------------------
+3. BIBLIOTECAS RELEVANTES E SUAS APLICAÇÕES NO PROJETO
+--------------------------------------------------------------------------------
+
+As seguintes bibliotecas e módulos nativos do ecossistema Python foram aplicados:
+
+1. docx (python-docx)
+   * Onde é usada: Em `generate_report.py` (função `build_docx_report`).
+   * Aplicação: Utilizada para compilar e formatar o relatório científico final
+     (Relatorio_Academico_Digital_Phytomer.docx). A biblioteca gerencia estilos
+     de texto (fontes Calibri, tamanhos Pt, cores RGBColor), margens de página
+     (Inches), inserção dinâmica de imagens das figuras com controle de escala,
+     e a criação de tabelas complexas com sombreamento de XML nativo 
+     (w:shd / w:tblBorders) para atender a padrões editoriais rígidos (APA/IEEE).
+
+2. matplotlib (matplotlib.pyplot)
+   * Onde é usada: Em `generate_report.py`, `evaluate.py` e `evaluate_blackbox.py`.
+   * Aplicação: Responsável por plotar os resultados experimentais. Gera gráficos
+     de barras paralelas (`sequence_results.png`), múltiplos subplots de sucesso, 
+     tempo e custo metabólico (`blackbox_results.png`), gráficos de linhas para
+     curvas ontogenéticas de nascimento e morte de agentes (`ontogenetic_plasticity.png`),
+     e o gráfico acadêmico de métricas avançadas de desgaste termodinâmico 
+     (`academic_metrics.png`).
+
+3. numpy (numpy)
+   * Onde é usada: Em `generate_report.py`, `evaluate.py`, e `vector_store.py`.
+   * Aplicação: Usada para gerenciar os vetores matemáticos e o cálculo dos 
+     espaçamentos de plotagem multivariada. Em `vector_store.py`, o NumPy 
+     desempenha um papel crítico no cálculo rápido da similaridade de cosseno 
+     (através de `np.dot` e `np.linalg.norm`) para o somatic recall de dados, 
+     garantindo buscas de alta velocidade sem a necessidade de bancos de dados 
+     vetoriais pesados.
+
+4. requests
+   * Onde é usada: Em `ollama_client.py` (métodos `pull_model` e `generate`).
+   * Aplicação: Utilizada para gerenciar a comunicação de rede HTTP com o servidor
+     local do Ollama. Envia payloads em formato JSON contendo prompts, temperaturas
+     e parâmetros de modelagem, e recebe as respostas da API contendo a geração 
+     textual e as métricas de prompt e completion (prompt_eval_count e eval_count).
+
+5. csv
+   * Onde é usada: Em `evaluate.py`, `evaluate_blackbox.py` e `generate_report.py`.
+   * Aplicação: Utilizada para salvar e ler as planilhas estruturadas de métricas
+     (sequence_metrics.csv e blackbox_metrics.csv). Permite que os scripts de teste
+     grave e atualize dados de acurácia, tokens e tempo e o script de relatório
+     carregue as variáveis em tempo de execução de forma limpa.
+
+6. subprocess
+   * Onde é usada: Em `evaluate_blackbox.py` (função `run_generated_script`).
+   * Aplicação: Crucial no Estudo 2. Permite que os micro-agentes executem
+     scripts locais de probe (como `probe_b.py` e `probe_c_gather.py`) gerados
+     dinamicamente. O subprocesso executa o interpretador python isoladamente,
+     captura as correntes de saída padrão (stdout) para extrair as respostas da
+     API, e lê saídas de erro (stderr) para guiar o aprendizado sob falhas.
+
+7. hashlib
+   * Onde é usada: Em `ollama_client.py` (método `get_embeddings`).
+   * Aplicação: Usada para computar assinaturas de hash MD5 robustas de palavras
+     e gerar um vetor de hashing de características estável de 256 dimensões.
+     Isso evita o colapso de representação comum em modelos casuais pequenos,
+     garantindo a recuperação perfeita na memória somática por cosseno.
+
+8. re (Regular Expressions)
+   * Onde é usada: Em `evaluate.py` e `evaluate_blackbox.py`.
+   * Aplicação: Utilizada para realizar o parsing de dados não estruturados gerados
+     pelos resolvedores de linguagem natural. Permite extrair o código python limpo
+     de dentro de blocos markdown (```python...```) e extrair os tokens de resposta
+     e chaves de flag das APIs de teste.
+
+--------------------------------------------------------------------------------
+4. DIRETRIZES DE MÈTRICAS CIENTÍFICAS CALCULADAS
+--------------------------------------------------------------------------------
+
+A metodologia computacional das métricas teóricas segue a formalização científica:
+
+* Rendimento Metabólico ($\eta_M$):
+  $\eta_M = \frac{\text{Acurácia Final (\%) \times 1.000.000}}{\text{Tokens Totais Consumidos}}$
+  Mede o nível de eficácia cognitiva obtida por custo energético unitário de token.
+
+* Carga Alostática ($L_A$):
+  $L_A = \text{Total de prompt\_tokens processados}$
+  Reflete o desgaste do sistema ao manter dados e históricos ativos na janela.
+
+* Turnover Celular / Abscisão ($T_A$):
+  $T_A = \frac{\text{Micro-agentes Destruídos}}{\text{Micro-agentes Criados}}$
+  Quantifica a taxa de reciclagem do tecido computational e sua reatividade Topológica.
+
+* Catastrophic Forgetting Index ($CFI$):
+  $CFI = \text{Acurácia}_{\text{pré-shift}} - \text{Acurácia}_{\text{retenção}}$
+  Avalia o nível de decaimento do aprendizado basal após a mudança estressante.
+
+* Custo de Adaptação de Fronteira ($\Delta C_{adapt}$):
+  $\Delta C_{adapt} = \text{Tokens}_{\text{pós-shift}} - \text{Tokens}_{\text{pré-shift}}$
+  Mede a energia gasta no momento de transição e readequação de paradigma.
+
+--------------------------------------------------------------------------------
+5. REFERÊNCIAS BIBLIOGRÁFICAS
+--------------------------------------------------------------------------------
+
+1. Bell, A. D. (2008). Plant Form: An Illustrated Guide to Flowering Plant 
+   Morphology. Timber Press. (Conceitualização botânica de fitômeros e plasticidade).
+   
+2. Gagliano, M., et al. (2014). Experience teaches plants to learn: Mimosa 
+   pudica learn and remember. Oecologia, 175(1), 73-82. (Habituação de estresse
+   e memória persistente).
+   
+3. Koestler, A. (1967). The Ghost in the Machine. Random House. (Organização de
+   estruturas em Holarquias e Holons).
+   
+4. McEwen, B. S. (1998). Protective and Damaging Effects of Stress Mediators: 
+   Allostasis and Allostatic Load. New England Journal of Medicine, 338, 171-179.
+   (Base médica/fisiológica da Carga Alostática e recuperação do estresse).
+================================================================================

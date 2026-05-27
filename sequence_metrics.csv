@@ -1,0 +1,4 @@
+Group,Overall_Accuracy,Pre_Shift_Accuracy,Post_Shift_Accuracy,Metabolic_Efficiency,Retention_Accuracy,Retention_Tokens,Retention_Time,Metabolic_Yield,Custo_Adaptacao_Fronteira,Cell_Turnover,Catastrophic_Forgetting_Index,Allostatic_Load
+Group A (Baseline),0.25,0.1,0.4,1416.0,0.4,1607,7.632559299468994,3531.0734463276835,738,0.0,-0.30000000000000004,1240
+Group B (Single-Tree),0.1,0.1,0.1,49398.5,0.0,3468,5.8679304122924805,101.21764830915919,48345,0.14814814814814814,0.1,44033
+Group C (Forest),0.2,0.2,0.2,55959.5,0.75,5462,9.434434175491333,89.35033372349646,-41486,0.17177914110429449,-0.55,78905
