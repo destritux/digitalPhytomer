@@ -233,31 +233,115 @@ def compute_fdi_window(window_history):
     return fdi
 
 
+def compute_persistence_score(spec_matrix):
+    """
+    Computes the Persistence Score:
+    Persistence = dominant_domain_tasks / total_tasks_solved for each agent.
+    Returns the average across all agents that solved at least one task.
+    """
+    persistences = []
+    for aid, counts in spec_matrix.items():
+        math_count = counts.get("Math", 0)
+        cyber_count = counts.get("Cyber", 0)
+        total = math_count + cyber_count
+        if total > 0:
+            dominant = max(math_count, cyber_count)
+            persistences.append(dominant / total)
+    if persistences:
+        return np.mean(persistences)
+    else:
+        return 1.0  # Default to 1.0 if no tasks have been solved yet
+
+
+def save_spec_matrix_csv(spec_matrix, filename):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["agent_id", "Math", "Cyber"])
+        for aid in sorted(spec_matrix.keys()):
+            writer.writerow([aid, spec_matrix[aid].get("Math", 0), spec_matrix[aid].get("Cyber", 0)])
+
+
+def plot_specialization_heatmaps(matrix_c, matrix_c_abl, phase_name, filepath):
+    agents_list = [f"Cell-{i+1:03d}" for i in range(8)]
+    domains = ["Math", "Cyber"]
+    
+    # Convert to 2D numpy arrays
+    data_c = np.zeros((8, 2))
+    data_abl = np.zeros((8, 2))
+    
+    for idx, aid in enumerate(agents_list):
+        data_c[idx, 0] = matrix_c.get(aid, {}).get("Math", 0)
+        data_c[idx, 1] = matrix_c.get(aid, {}).get("Cyber", 0)
+        
+        data_abl[idx, 0] = matrix_c_abl.get(aid, {}).get("Math", 0)
+        data_abl[idx, 1] = matrix_c_abl.get(aid, {}).get("Cyber", 0)
+        
+    # Shared colorbar scale
+    vmin = 0
+    vmax = max(data_c.max(), data_abl.max(), 1)
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    
+    # Group C heatmap
+    im1 = ax1.imshow(data_c, cmap="YlGnBu", vmin=vmin, vmax=vmax, aspect="auto")
+    ax1.set_title("Group C (Emergent Swarm)", fontsize=12, fontweight="bold")
+    ax1.set_xticks(range(2))
+    ax1.set_xticklabels(domains, fontsize=10, fontweight="bold")
+    ax1.set_yticks(range(8))
+    ax1.set_yticklabels(agents_list)
+    ax1.set_ylabel("Agents", fontsize=11, fontweight="bold")
+    
+    # Annotate Group C
+    for i in range(8):
+        for j in range(2):
+            ax1.text(j, i, f"{int(data_c[i, j])}", ha="center", va="center", 
+                     color="black" if data_c[i, j] < vmax/2 else "white", fontweight="bold")
+                     
+    # Group C-Ablated heatmap
+    im2 = ax2.imshow(data_abl, cmap="YlGnBu", vmin=vmin, vmax=vmax, aspect="auto")
+    ax2.set_title("Group C-Ablated (No Somatic Memory)", fontsize=12, fontweight="bold")
+    ax2.set_xticks(range(2))
+    ax2.set_xticklabels(domains, fontsize=10, fontweight="bold")
+    ax2.set_yticks(range(8))
+    ax2.set_yticklabels([]) # Hide yticklabels for the second plot since they are the same
+    
+    # Annotate Group C-Ablated
+    for i in range(8):
+        for j in range(2):
+            ax2.text(j, i, f"{int(data_abl[i, j])}", ha="center", va="center", 
+                     color="black" if data_abl[i, j] < vmax/2 else "white", fontweight="bold")
+                     
+    # Shared colorbar
+    fig.subplots_adjust(right=0.85)
+    cbar_ax = fig.add_axes([0.88, 0.15, 0.03, 0.7])
+    fig.colorbar(im1, cax=cbar_ax, label="Successful Tasks Solved")
+    
+    plt.suptitle(f"Domain Specialization Heatmap - {phase_name}", fontsize=14, fontweight="bold", y=0.98)
+    plt.savefig(filepath, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
 def run_swarm(use_somatic_memory: bool, group_name: str):
     print("\n" + "="*80)
     print(f"RUNNING {group_name} (Somatic Memory = {use_somatic_memory})")
     print("="*80)
     client.reset_stats()
     
-    s_mem = SomaticVectorStore()
-    world = WorldState()
-    
-    # Initialize homogeneous population
+    # Initialize homogeneous population of N=8 agents
     agents = {}
-    for i in range(4):
+    for i in range(8):
         aid = f"Cell-{i+1:03d}"
         agents[aid] = MicroAgent(
             agent_id=aid,
             role="undifferentiated_cell",
             system_prompt=f"You are a generic swarm cell '{aid}'. Solve the task and output only the final answer.",
             client=client,
-            somatic_memory=s_mem
+            somatic_memory=SomaticVectorStore() # Isolated local memory store
         )
         agents[aid].use_somatic_memory = use_somatic_memory
         agents[aid].strategy = "undifferentiated"
-        agents[aid].task_count = 0
-        agents[aid].failures_count = 0
-        agents[aid].pending_reward = 0.0
+        agents[aid].solved_count = 0
         agents[aid].trust_scores = {}
         
     # Reconcile trust scores uniformly to 0.5
@@ -270,14 +354,16 @@ def run_swarm(use_somatic_memory: bool, group_name: str):
     reconcile_trust(agents)
     
     # Specialization tracking matrix: matrix[agent_id][domain] = count
-    spec_matrix = {}
+    spec_matrix = {aid: {"Math": 0, "Cyber": 0} for aid in agents.keys()}
     success_history = []  # list of {"agent_id": aid, "domain": dom, "step": step}
     
     # Telemetry histories
     history_fdi = []
     history_dominance = []
-    history_integrity = []
-    history_pop_size = []
+    history_mean_trust = []
+    history_max_trust = []
+    history_coordination_entropy = []
+    history_persistence = []
     
     results = []
     
@@ -288,38 +374,40 @@ def run_swarm(use_somatic_memory: bool, group_name: str):
             delegations[src] = {}
         delegations[src][dst] = delegations[src].get(dst, 0) + 1
         
+    spec_matrix_p1 = None
+    
     for step, task in enumerate(TASKS):
         print(f"\n[{group_name}] Step {step} Task {task['id']} ({task['domain']})...")
         prompt = task["prompt"]
         expected = task["expected"]
         domain = task["domain"]
         
-        active_ids = list(agents.keys())
-        if not active_ids:
-            print("[Warning] Swarm extinct! Spawning rescue undifferentiated cell...")
-            aid = f"Cell-rescue-{step}"
-            agents[aid] = MicroAgent(aid, "undifferentiated_cell", "Rescue cell", client, somatic_memory=s_mem)
-            agents[aid].use_somatic_memory = use_somatic_memory
-            agents[aid].strategy = "undifferentiated"
-            agents[aid].task_count = 0
-            agents[aid].failures_count = 0
-            agents[aid].pending_reward = 0.0
-            agents[aid].trust_scores = {}
-            reconcile_trust(agents)
-            active_ids = [aid]
-            
-        # 1. Decentralized Bidding with Monopoly Tax
+        active_ids = sorted(list(agents.keys()))
+        
+        # 1. Bidding based on competence (somatic memory similarity) and monopoly tax
         bids = {}
         for aid in active_ids:
             agent = agents[aid]
-            monopoly_tax = min(0.8, agent.task_count * 0.05)
-            # Homogeneous bidding metric (energy * capacity, penalizing monopoly)
-            bid_val = agent.energy * (1.0 - monopoly_tax) + random.uniform(-0.5, 0.5)
+            monopoly_tax = min(0.4, agent.solved_count * 0.015)
+            
+            competence = 0.0
+            if use_somatic_memory:
+                q_emb = client.get_embeddings(prompt)
+                matches = agent.memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+                if matches:
+                    doc_domain = matches[0]["metadata"].get("domain")
+                    if doc_domain == domain:
+                        competence = matches[0]["score"]
+                    else:
+                        competence = matches[0]["score"] * 0.1
+                    
+            bid_val = competence * 0.6 + (1.0 - monopoly_tax) * 0.4 + random.uniform(-0.05, 0.05)
             bids[aid] = bid_val
             
         primary_id = max(bids, key=bids.get)
         primary = agents[primary_id]
-        print(f"  [Bid Won] Cell {primary_id} claims task (Energy: {primary.energy:.1f}, Monopoly Tax: {min(0.8, primary.task_count * 0.05)*100:.1f}%)")
+        primary_tax = min(0.4, primary.solved_count * 0.015)
+        print(f"  [Bid Won] Cell {primary_id} claims task (Monopoly Tax: {primary_tax*100:.1f}%)")
         
         # Execute Task
         res = primary.solve(prompt)
@@ -332,21 +420,37 @@ def run_swarm(use_somatic_memory: bool, group_name: str):
         
         if success:
             print(f"  [Primary Success] Cell {primary_id} resolved the task.")
-            primary.pending_reward += 25.0
-            primary.task_count += 1
-            world.update(True)
+            # Record success pattern in somatic memory
+            if use_somatic_memory:
+                emb = client.get_embeddings(prompt)
+                primary.memory.vector_store.add_document(
+                    text=f"Domain: {domain}. Task: {prompt}. Solution: {expected}",
+                    embedding=emb,
+                    metadata={"domain": domain, "type": "success_pattern"}
+                )
         else:
             print(f"  [Primary Failure] Cell {primary_id} failed. Emitting delegation request...")
-            primary.adjust_energy(-20)
             
-            # 2. Decentralized Peer-to-Peer Delegation based on local trust scores
+            # 2. Decentralized Peer-to-Peer Delegation
             backup_bids = {}
             for aid in active_ids:
                 if aid != primary_id:
                     agent = agents[aid]
                     trust = primary.trust_scores.get(aid, 0.5)
-                    monopoly_tax = min(0.8, agent.task_count * 0.05)
-                    backup_bid_val = agent.energy * trust * (1.0 - monopoly_tax) + random.uniform(-0.25, 0.25)
+                    monopoly_tax = min(0.4, agent.solved_count * 0.015)
+                    
+                    competence = 0.0
+                    if use_somatic_memory:
+                        q_emb = client.get_embeddings(prompt)
+                        matches = agent.memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+                        if matches:
+                            doc_domain = matches[0]["metadata"].get("domain")
+                            if doc_domain == domain:
+                                competence = matches[0]["score"]
+                            else:
+                                competence = matches[0]["score"] * 0.1
+                            
+                    backup_bid_val = trust * 0.4 + competence * 0.3 + (1.0 - monopoly_tax) * 0.3 + random.uniform(-0.05, 0.05)
                     backup_bids[aid] = backup_bid_val
                     
             if backup_bids:
@@ -361,116 +465,77 @@ def run_swarm(use_somatic_memory: bool, group_name: str):
                 final_success = verify_task(helper_answer, expected)
                 helper.record_attempt(helper_answer, "verified_backup", final_success, prompt=prompt)
                 
-                # Trust network updates (local & symmetric)
                 if final_success:
                     print(f"    [Helper Success] Helper {helper_id} resolved delegated task.")
-                    helper.pending_reward += 25.0
-                    helper.task_count += 1
                     final_solver_id = helper_id
                     
-                    # Local & Symmetric reinforcement
-                    primary.trust_scores[helper_id] = min(1.0, primary.trust_scores.get(helper_id, 0.5) + 0.1)
-                    helper.trust_scores[primary_id] = min(1.0, helper.trust_scores.get(primary_id, 0.5) + 0.05) # reciprocal bonus
-                    world.update(True)
+                    # Record success pattern in helper's somatic memory
+                    if use_somatic_memory:
+                        emb = client.get_embeddings(prompt)
+                        helper.memory.vector_store.add_document(
+                            text=f"Domain: {domain}. Task: {prompt}. Solution: {expected}",
+                            embedding=emb,
+                            metadata={"domain": domain, "type": "success_pattern"}
+                        )
+                        
+                    # Trust network updates (local & symmetric, moderate deltas)
+                    primary.trust_scores[helper_id] = min(1.0, primary.trust_scores.get(helper_id, 0.5) + 0.03)
+                    helper.trust_scores[primary_id] = min(1.0, helper.trust_scores.get(primary_id, 0.5) + 0.01)
                 else:
                     print(f"    [Helper Failure] Helper {helper_id} failed.")
-                    helper.adjust_energy(-20)
+                    # Penalize trust locally (delegator trust in helper)
+                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - 0.02)
                     
-                    # Penalize trust locally
-                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - 0.05)
-                    world.update(False)
-            else:
-                world.update(False)
-                
-        # Update Specialization Matrix on success
+        # Update Specialization Matrix and Solved Count on success
         if final_success:
-            if final_solver_id not in spec_matrix:
-                spec_matrix[final_solver_id] = {"Math": 0, "Cyber": 0}
-            spec_matrix[final_solver_id][domain] = spec_matrix[final_solver_id].get(domain, 0) + 1
+            spec_matrix[final_solver_id][domain] += 1
+            agents[final_solver_id].solved_count += 1
             success_history.append({"agent_id": final_solver_id, "domain": domain, "step": step})
             
-        # 3. Delayed Reward Distribution (Steps 9, 19)
-        phase_end = (step % 10 == 9)
-        if phase_end:
-            total_pending = sum(a.pending_reward for a in agents.values())
-            print(f"  [Delayed Reward Phase End] Distributing pending energy pool: {total_pending:.1f}")
-            if total_pending > 0:
-                for aid in list(agents.keys()):
-                    agent = agents[aid]
-                    share_80 = 0.8 * agent.pending_reward
-                    agent.adjust_energy(share_80)
-                    
-                    # 20% shared with highest affinity peer
-                    share_20 = 0.2 * agent.pending_reward
-                    if agent.trust_scores:
-                        active_peers = [p for p in agent.trust_scores if p in agents]
-                        if active_peers:
-                            highest_peer = max(active_peers, key=agent.trust_scores.get)
-                            agents[highest_peer].adjust_energy(share_20)
-                            print(f"    Energy Share: {aid} shared {share_20:.1f} with peer {highest_peer}")
-                            
-                    agent.pending_reward = 0.0
-                    
-        # 4. Metabolic decay and evolutionary cycle
-        for aid in list(agents.keys()):
-            agent = agents[aid]
-            # Monopoly decay tax
-            decay = 6 + (agent.task_count * 0.5)
-            agent.adjust_energy(-decay)
-            
-            # Prune dead cells
-            if agent.is_dead():
-                print(f"  [GC] Cell {aid} died (depleted energy). Pruning from swarm.")
-                del agents[aid]
-                continue
-                
-            # Division (reproduction) with trust crossover inheritance
-            if agent.energy >= 120 and len(agents) < 8:
-                child_id = f"Cell-replica-{random.randint(100, 999)}"
-                print(f"  [Swarm Division] Cell {aid} splits. Spawned child {child_id}.")
-                agents[child_id] = MicroAgent(child_id, "undifferentiated_cell", agent.system_prompt, client, somatic_memory=s_mem)
-                agents[child_id].use_somatic_memory = use_somatic_memory
-                agents[child_id].strategy = agent.strategy
-                agents[child_id].task_count = 0
-                agents[child_id].failures_count = 0
-                agents[child_id].pending_reward = 0.0
-                agents[child_id].trust_scores = {}
-                
-                # Division cost
-                agent.adjust_energy(-45)
-                reconcile_trust(agents)
-                
-                # Crossover trust score inheritance
-                parent_peers = [p for p in agent.trust_scores.keys() if p in agents]
-                if parent_peers:
-                    best_peer = max(parent_peers, key=lambda p: agent.trust_scores[p])
-                    for peer in agents:
-                        if peer != child_id:
-                            p_trust = agent.trust_scores.get(peer, 0.5)
-                            b_trust = agents[best_peer].trust_scores.get(peer, 0.5)
-                            agents[child_id].trust_scores[peer] = max(0.0, min(1.0, 0.5 * p_trust + 0.5 * b_trust + random.uniform(-0.05, 0.05)))
-                            
-        reconcile_trust(agents)
-        
-        # 5. Window-Based Metrics Calculation (Window K = 10 steps)
-        # Calculate FDI and Hub Dominance
+        # 3. Calculate sliding-window metrics
         window_start = max(0, step - 9)
         window_history = [item for item in success_history if window_start <= item["step"] <= step]
         
-        fdi_val = compute_fdi_window(window_history)
-        
+        # FDI (NaN for first 9 tasks)
+        if step < 9:
+            fdi_val = np.nan
+        else:
+            fdi_val = compute_fdi_window(window_history)
+            
         # Hub Dominance
-        active_ids = list(agents.keys())
         avg_trusts = []
         for aid in active_ids:
-            links = [agents[aid].trust_scores[bid] for bid in active_ids if bid != aid]
+            links = [agents[aid].trust_scores.get(bid, 0.5) for bid in active_ids if bid != aid]
             avg_trusts.append(np.mean(links) if links else 0.5)
         hub_dom = np.std(avg_trusts) if len(avg_trusts) > 1 else 0.0
         
+        # Mean & Max Trust
+        trust_vals = []
+        for aid in active_ids:
+            for bid in active_ids:
+                if aid != bid:
+                    trust_vals.append(agents[aid].trust_scores.get(bid, 0.5))
+        trust_vals = np.array(trust_vals)
+        mean_tr = np.mean(trust_vals) if len(trust_vals) > 0 else 0.5
+        max_tr = np.max(trust_vals) if len(trust_vals) > 0 else 0.5
+        
+        # Coordination Entropy
+        if len(trust_vals) > 0 and np.sum(trust_vals) > 0:
+            p_trusts = trust_vals / np.sum(trust_vals)
+            coord_entropy = -np.sum(p_trusts * np.log2(p_trusts + 1e-9))
+        else:
+            coord_entropy = 0.0
+            
+        # Persistence Score
+        persistence = compute_persistence_score(spec_matrix)
+        
+        # Log to histories
         history_fdi.append(fdi_val)
         history_dominance.append(hub_dom)
-        history_integrity.append(world.integrity)
-        history_pop_size.append(len(active_ids))
+        history_mean_trust.append(mean_tr)
+        history_max_trust.append(max_tr)
+        history_coordination_entropy.append(coord_entropy)
+        history_persistence.append(persistence)
         
         results.append({
             "task_id": task["id"],
@@ -478,22 +543,32 @@ def run_swarm(use_somatic_memory: bool, group_name: str):
             "tokens": client.get_weighted_tokens(),
             "fdi": fdi_val,
             "dominance": hub_dom,
-            "integrity": world.integrity,
-            "pop_size": len(active_ids)
+            "mean_trust": mean_tr,
+            "max_trust": max_tr,
+            "coordination_entropy": coord_entropy,
+            "persistence": persistence
         })
+        
+        # Phase-wise matrix capture and saving
+        if step == 9:
+            spec_matrix_p1 = {aid: dict(counts) for aid, counts in spec_matrix.items()}
+            suffix = "" if use_somatic_memory else "_ablated"
+            save_spec_matrix_csv(spec_matrix_p1, f"results/specialization_matrix_phase1{suffix}.csv")
+        elif step == 19:
+            suffix = "" if use_somatic_memory else "_ablated"
+            save_spec_matrix_csv(spec_matrix, f"results/specialization_matrix_phase2{suffix}.csv")
+            
         time.sleep(0.1)
         
-    return results, spec_matrix, {
+    return results, spec_matrix_p1, spec_matrix, {
         "fdi": history_fdi,
         "dominance": history_dominance,
-        "integrity": history_integrity,
-        "pop_size": history_pop_size
+        "mean_trust": history_mean_trust,
+        "max_trust": history_max_trust,
+        "coordination_entropy": history_coordination_entropy,
+        "persistence": history_persistence
     }
 
-
-# =====================================================================
-# 5. EXPERIMENTAL COMPARATIVE RUN
-# =====================================================================
 
 def main():
     print("[Warm-up] Initializing qwen2.5:0.5b in GPU memory...")
@@ -504,57 +579,89 @@ def main():
     # 1. Run all conditions
     res_a = run_group_a()
     res_b = run_group_b()
-    res_c, spec_c, metrics_c = run_swarm(use_somatic_memory=True, group_name="Group C (Emergent Swarm)")
-    res_c_abl, spec_c_abl, metrics_c_abl = run_swarm(use_somatic_memory=False, group_name="Group C-Ablated (No Memory)")
+    res_c, spec_c_p1, spec_c_p2, metrics_c = run_swarm(use_somatic_memory=True, group_name="Group C (Emergent Swarm)")
+    res_c_abl, spec_c_abl_p1, spec_c_abl_p2, metrics_c_abl = run_swarm(use_somatic_memory=False, group_name="Group C-Ablated (No Memory)")
     
     # Ensure results folder exists
     os.makedirs("results", exist_ok=True)
     
-    # 2. Save comparative metrics CSV
+    # 2. Save comparative metrics CSV (tidy long-form)
     print("\n[Save] Saving results/scientific_mvp_metrics.csv...")
     with open("results/scientific_mvp_metrics.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
-            "Task_ID", "Domain", 
-            "GroupA_Success", "GroupA_Tokens", 
-            "GroupB_Success", "GroupB_Tokens", 
-            "GroupC_Success", "GroupC_Tokens", "GroupC_FDI", "GroupC_Dominance", "GroupC_Integrity", "GroupC_PopSize",
-            "GroupCAbl_Success", "GroupCAbl_Tokens", "GroupCAbl_FDI", "GroupCAbl_Dominance", "GroupCAbl_Integrity", "GroupCAbl_PopSize"
+            "step", "group", "accuracy_window", "fdi_window", 
+            "mean_trust", "max_trust", "coordination_entropy", "persistence_score"
         ])
-        for i in range(len(TASKS)):
-            task = TASKS[i]
+        
+        # Helper to compute rolling accuracy
+        def get_rolling_accs(res_list):
+            accs = []
+            for t in range(20):
+                window = [1 if r["success"] else 0 for r in res_list[max(0, t-9):t+1]]
+                accs.append(np.mean(window))
+            return accs
+            
+        rolling_a = get_rolling_accs(res_a)
+        rolling_b = get_rolling_accs(res_b)
+        
+        # Write Group A
+        for t in range(20):
+            writer.writerow([t, "A", rolling_a[t], "NaN", "NaN", "NaN", "NaN", "NaN"])
+            
+        # Write Group B
+        for t in range(20):
+            writer.writerow([t, "B", rolling_b[t], "NaN", "NaN", "NaN", "NaN", "NaN"])
+            
+        # Write Group C
+        for t in range(20):
             writer.writerow([
-                task["id"], task["domain"],
-                1 if res_a[i]["success"] else 0, res_a[i]["tokens"],
-                1 if res_b[i]["success"] else 0, res_b[i]["tokens"],
-                1 if res_c[i]["success"] else 0, res_c[i]["tokens"], metrics_c["fdi"][i], metrics_c["dominance"][i], metrics_c["integrity"][i], metrics_c["pop_size"][i],
-                1 if res_c_abl[i]["success"] else 0, res_c_abl[i]["tokens"], metrics_c_abl["fdi"][i], metrics_c_abl["dominance"][i], metrics_c_abl["integrity"][i], metrics_c_abl["pop_size"][i]
+                t, "C", 
+                np.mean([1 if r["success"] else 0 for r in res_c[max(0, t-9):t+1]]),
+                metrics_c["fdi"][t] if not np.isnan(metrics_c["fdi"][t]) else "NaN",
+                metrics_c["mean_trust"][t],
+                metrics_c["max_trust"][t],
+                metrics_c["coordination_entropy"][t],
+                metrics_c["persistence"][t]
             ])
             
-    # 3. Save Specialization Matrices
-    print("[Save] Saving results/specialization_matrix.csv...")
-    with open("results/specialization_matrix.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["agent_id", "Math", "Cyber"])
-        for aid, counts in spec_c.items():
-            writer.writerow([aid, counts.get("Math", 0), counts.get("Cyber", 0)])
-            
-    with open("results/specialization_matrix_ablated.csv", "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["agent_id", "Math", "Cyber"])
-        for aid, counts in spec_c_abl.items():
-            writer.writerow([aid, counts.get("Math", 0), counts.get("Cyber", 0)])
+        # Write Group C-Ablated
+        for t in range(20):
+            writer.writerow([
+                t, "C-Ablated",
+                np.mean([1 if r["success"] else 0 for r in res_c_abl[max(0, t-9):t+1]]),
+                metrics_c_abl["fdi"][t] if not np.isnan(metrics_c_abl["fdi"][t]) else "NaN",
+                metrics_c_abl["mean_trust"][t],
+                metrics_c_abl["max_trust"][t],
+                metrics_c_abl["coordination_entropy"][t],
+                metrics_c_abl["persistence"][t]
+            ])
             
     # Copy to brain folder for user visibility
     brain_dir = "/home/destritux/.gemini/antigravity-cli/brain/1f9283d8-d5ea-4cf5-b98d-5d0494e22db2"
     os.makedirs(brain_dir, exist_ok=True)
     shutil.copy("results/scientific_mvp_metrics.csv", os.path.join(brain_dir, "scientific_mvp_metrics.csv"))
+    shutil.copy("results/specialization_matrix_phase1.csv", os.path.join(brain_dir, "specialization_matrix_phase1.csv"))
+    shutil.copy("results/specialization_matrix_phase1_ablated.csv", os.path.join(brain_dir, "specialization_matrix_phase1_ablated.csv"))
+    shutil.copy("results/specialization_matrix_phase2.csv", os.path.join(brain_dir, "specialization_matrix_phase2.csv"))
+    shutil.copy("results/specialization_matrix_phase2_ablated.csv", os.path.join(brain_dir, "specialization_matrix_phase2_ablated.csv"))
+    
+    # Save the legacy final filenames for backwards compatibility
+    shutil.copy("results/specialization_matrix_phase2.csv", "results/specialization_matrix.csv")
+    shutil.copy("results/specialization_matrix_phase2_ablated.csv", "results/specialization_matrix_ablated.csv")
     shutil.copy("results/specialization_matrix.csv", os.path.join(brain_dir, "specialization_matrix.csv"))
     shutil.copy("results/specialization_matrix_ablated.csv", os.path.join(brain_dir, "specialization_matrix_ablated.csv"))
     print("[Save] CSV logs saved successfully.")
     
+    # 3. Plot Specialization Heatmaps
+    print("\n[Plot] Generating heatmaps...")
+    plot_specialization_heatmaps(spec_c_p1, spec_c_abl_p1, "Phase 1 (Task 9)", "results/specialization_heatmap_phase1.png")
+    plot_specialization_heatmaps(spec_c_p2, spec_c_abl_p2, "Phase 2 (Task 19)", "results/specialization_heatmap_phase2.png")
+    shutil.copy("results/specialization_heatmap_phase1.png", os.path.join(brain_dir, "specialization_heatmap_phase1.png"))
+    shutil.copy("results/specialization_heatmap_phase2.png", os.path.join(brain_dir, "specialization_heatmap_phase2.png"))
+    print("[Plot] Saved specialization heatmaps successfully.")
+    
     # 4. Calculate Phase-wise Success Rates and Learning Deltas
-    # Math: tasks 0-4 (first 5), 5-9 (last 5). Cyber: tasks 10-14 (first 5), 15-19 (last 5)
     def calc_stats(results_list):
         math_first = sum(1 for r in results_list[0:5] if r["success"]) / 5.0
         math_last = sum(1 for r in results_list[5:10] if r["success"]) / 5.0
@@ -577,7 +684,7 @@ def main():
     stats_c_abl = calc_stats(res_c_abl)
     
     print("\n" + "="*80)
-    print("COMPARATIVE STUDY METRICS SUMMARY")
+    print("COMPARATIVE STUDY SUMMARY")
     print("="*80)
     print("Math Sequences Phase (Overall Accuracy | Learning Delta):")
     print(f"  Group A (Monolithic):  {stats_a['math_overall']*100:.1f}% | Delta: {stats_a['math_delta']*100:+.1f}%")
@@ -601,28 +708,29 @@ def main():
     shutil.copy("results/scientific_mvp_summary.txt", os.path.join(brain_dir, "scientific_mvp_summary.txt"))
     
     # 5. Plot Curves
-    print("\n[Plot] Generating plots...")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    print("\n[Plot] Generating curves plot...")
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
     
-    steps = range(1, len(TASKS) + 1)
+    steps = range(1, 21)
     
-    def rolling_avg(arr, window=3):
-        clean = []
-        for i in range(len(arr)):
-            sub = arr[max(0, i-window+1):i+1]
-            clean.append(np.mean(sub))
-        return clean
+    # Compute rolling accuracies with window=3 for visualization curve
+    def get_rolling_vis(res_list):
+        accs = []
+        for t in range(20):
+            window = [1 if r["success"] else 0 for r in res_list[max(0, t-2):t+1]]
+            accs.append(np.mean(window))
+        return accs
         
-    rolling_a = rolling_avg([1 if r["success"] else 0 for r in res_a])
-    rolling_b = rolling_avg([1 if r["success"] else 0 for r in res_b])
-    rolling_c = rolling_avg([1 if r["success"] else 0 for r in res_c])
-    rolling_c_abl = rolling_avg([1 if r["success"] else 0 for r in res_c_abl])
+    vis_a = get_rolling_vis(res_a)
+    vis_b = get_rolling_vis(res_b)
+    vis_c = get_rolling_vis(res_c)
+    vis_c_abl = get_rolling_vis(res_c_abl)
     
-    # Plot 1: Paradigm Shift Recovery Curves
-    ax1.plot(steps, rolling_a, label="Group A (Monolithic)", color="#1f77b4", linewidth=2, marker="o", markevery=2)
-    ax1.plot(steps, rolling_b, label="Group B (Orchestrated)", color="#aec7e8", linewidth=2, marker="s", markevery=2)
-    ax1.plot(steps, rolling_c, label="Group C (Emergent Swarm)", color="#2ca02c", linewidth=2.5, marker="^", markevery=2)
-    ax1.plot(steps, rolling_c_abl, label="Group C-Ablated (No Memory)", color="#d62728", linewidth=2, linestyle="--", marker="d", markevery=2)
+    # Subplot 1: Paradigm Shift Recovery Curves (Rolling Accuracy)
+    ax1.plot(steps, vis_a, label="Group A (Monolithic)", color="#1f77b4", linewidth=2, marker="o", markevery=2)
+    ax1.plot(steps, vis_b, label="Group B (Orchestrated)", color="#aec7e8", linewidth=2, marker="s", markevery=2)
+    ax1.plot(steps, vis_c, label="Group C (Emergent Swarm)", color="#2ca02c", linewidth=2.5, marker="^", markevery=2)
+    ax1.plot(steps, vis_c_abl, label="Group C-Ablated (No Memory)", color="#d62728", linewidth=2, linestyle="--", marker="d", markevery=2)
     
     ax1.axvline(x=10, color="gray", linestyle="-.", alpha=0.7)
     ax1.text(5, 0.95, "Math Sequences", ha="center", fontsize=10, fontweight="bold")
@@ -635,27 +743,47 @@ def main():
     ax1.legend(loc="lower left")
     ax1.grid(True, linestyle=":", alpha=0.6)
     
-    # Plot 2: FDI and Hub Dominance Curves (C vs C-Ablated)
+    # Subplot 2: FDI and Persistence Curves (C vs C-Ablated)
+    # Note: FDI has NaNs for the first 9 steps, matplotlib handles them gracefully
     ax2.plot(steps, metrics_c["fdi"], label="Group C: FDI", color="#2ca02c", linewidth=2.5)
     ax2.plot(steps, metrics_c_abl["fdi"], label="Group C-Ablated: FDI", color="#d62728", linewidth=2, linestyle="--")
     
-    ax2.plot(steps, metrics_c["dominance"], label="Group C: Hub Dominance", color="#ff7f0e", linewidth=2)
-    ax2.plot(steps, metrics_c_abl["dominance"], label="Group C-Ablated: Hub Dominance", color="#bcbd22", linewidth=1.5, linestyle="--")
+    ax2.plot(steps, metrics_c["persistence"], label="Group C: Persistence", color="#1f77b4", linewidth=2)
+    ax2.plot(steps, metrics_c_abl["persistence"], label="Group C-Ablated: Persistence", color="#ff7f0e", linewidth=1.5, linestyle="--")
     
     ax2.axvline(x=10, color="gray", linestyle="-.", alpha=0.5)
-    
     ax2.set_xlabel("Simulation Steps", fontsize=11, fontweight="bold")
     ax2.set_ylabel("Metric Value (Index 0.0 - 1.0)", fontsize=11, fontweight="bold")
-    ax2.set_title("Emergent Specialization vs Centralization", fontsize=13, fontweight="bold")
+    ax2.set_title("Emergent Specialization & Persistence", fontsize=13, fontweight="bold")
     ax2.set_ylim(-0.05, 1.05)
     ax2.legend(loc="upper right")
     ax2.grid(True, linestyle=":", alpha=0.6)
+    
+    # Subplot 3: Trust Graph Metrics (Hub Dominance and Coordination Entropy)
+    ax3.plot(steps, metrics_c["dominance"], label="Group C: Hub Dominance", color="#9467bd", linewidth=2)
+    ax3.plot(steps, metrics_c_abl["dominance"], label="Group C-Ablated: Hub Dominance", color="#c5b0d5", linewidth=1.5, linestyle="--")
+    
+    # Normalize entropy to [0, 1] for visual plotting (absolute max entropy is log2(56) = 5.8)
+    norm_entropy_c = [e / 5.8 for e in metrics_c["coordination_entropy"]]
+    norm_entropy_c_abl = [e / 5.8 for e in metrics_c_abl["coordination_entropy"]]
+    
+    ax3.plot(steps, norm_entropy_c, label="Group C: Coord. Entropy", color="#e377c2", linewidth=2)
+    ax3.plot(steps, norm_entropy_c_abl, label="Group C-Ablated: Coord. Entropy", color="#f7b6d2", linewidth=1.5, linestyle="--")
+    
+    ax3.axvline(x=10, color="gray", linestyle="-.", alpha=0.5)
+    ax3.set_xlabel("Simulation Steps", fontsize=11, fontweight="bold")
+    ax3.set_ylabel("Metric Value (Normalized 0.0 - 1.0)", fontsize=11, fontweight="bold")
+    ax3.set_title("Trust Network Dynamics", fontsize=13, fontweight="bold")
+    ax3.set_ylim(-0.05, 1.05)
+    ax3.legend(loc="lower left")
+    ax3.grid(True, linestyle=":", alpha=0.6)
     
     plt.tight_layout()
     plt.savefig("results/scientific_mvp_curves.png", dpi=300)
     shutil.copy("results/scientific_mvp_curves.png", os.path.join(brain_dir, "scientific_mvp_curves.png"))
     plt.close()
     print("[Plot] Saved results/scientific_mvp_curves.png successfully.")
+
 
 if __name__ == "__main__":
     main()
