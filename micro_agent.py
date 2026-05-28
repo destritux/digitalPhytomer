@@ -1,7 +1,9 @@
 import random
+from cognitive_memory import HierarchicalMemory
+from cognitive_strategy import STRATEGY_PROMPTS
 
 class MicroAgent:
-    def __init__(self, agent_id, role, system_prompt, client, initial_energy=100, max_energy=150):
+    def __init__(self, agent_id, role, system_prompt, client, initial_energy=100, max_energy=150, somatic_memory=None):
         self.agent_id = agent_id
         self.role = role
         self.system_prompt = system_prompt
@@ -9,7 +11,16 @@ class MicroAgent:
         self.energy = initial_energy
         self.max_energy = max_energy
         self.failures_count = 0
-        self.local_memory = [] # List of dicts tracking previous attempts/failures for this session
+        self.strategy = "default"
+        self.memory = HierarchicalMemory(somatic_memory)
+
+    @property
+    def local_memory(self):
+        return self.memory.episodic_log
+
+    @local_memory.setter
+    def local_memory(self, val):
+        self.memory.episodic_log = val
 
     def solve(self, problem, epigenetic_context=None, mutation_rate=0.01, model_name=None):
         """
@@ -34,12 +45,19 @@ class MicroAgent:
                 prompt_parts.append(f"- Past successful solution pattern: {ctx}")
             prompt_parts.append("=========================================================================\n")
 
-        if self.local_memory:
-            prompt_parts.append("=== Local Memory (Your previous attempts on this task) ===")
-            for idx, attempt in enumerate(self.local_memory):
-                prompt_parts.append(f"Attempt {idx+1}: {attempt['output']}")
-                prompt_parts.append(f"Feedback: {attempt['feedback']}")
-            prompt_parts.append("Learn from your previous mistakes and try a different approach.\n")
+        # Retrieve semantic context from somatic vector store
+        semantic_context = self.memory.retrieve_context(problem, self.client)
+        if semantic_context:
+            prompt_parts.append(semantic_context)
+
+        # Retrieve episodic local attempts
+        episodic_context = self.memory.get_memory_context()
+        if episodic_context:
+            prompt_parts.append(episodic_context)
+
+        # Inject mutated cognitive strategy instructions if active
+        if self.strategy in STRATEGY_PROMPTS:
+            prompt_parts.append(STRATEGY_PROMPTS[self.strategy])
 
         prompt_parts.append(f"Problem to solve:\n{problem}")
         
@@ -84,15 +102,16 @@ class MicroAgent:
             "is_mutated": is_mutated
         }
 
-    def record_attempt(self, output, feedback, success):
+    def record_attempt(self, output, feedback, success, prompt=""):
         """
-        Record the outcome of the solve attempt in local memory.
+        Record the outcome of the solve attempt in memory.
         """
-        self.local_memory.append({
-            "output": output,
-            "feedback": feedback,
-            "success": success
-        })
+        self.memory.add_episode(
+            prompt=prompt,
+            response=output,
+            evaluation_meta={"stderr": feedback, "success": success},
+            client=self.client
+        )
         if success:
             self.failures_count = 0
         else:

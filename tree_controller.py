@@ -32,13 +32,89 @@ class TreeController:
     def monitor_agents(self):
         """
         Garbage collection: Prunes agents that have depleted their energy.
+        Also runs the evolutionary cycle.
         """
         dead_ids = [aid for aid, agent in self.agents.items() if agent.is_dead()]
         for aid in dead_ids:
             role = self.agents[aid].role
             print(f"[GC] Pruning dead agent {aid} ({role}) due to energy depletion.")
-            del self.agents[aid]
-            self.destruction_count += 1
+            if aid in self.agents:
+                del self.agents[aid]
+                self.destruction_count += 1
+        
+        # Run evolutionary swarm cycle
+        self.run_evolutionary_cycle()
+
+    def run_evolutionary_cycle(self):
+        """
+        Runs natural selection and reproduction on the current agent population.
+        Applies diversity pressure to prevent agent collapse.
+        """
+        import random
+        active_agents = list(self.agents.values())
+        if len(active_agents) < 2:
+            return
+
+        # 1. Calculate strategy distribution for diversity penalty
+        strat_dist = {}
+        for agent in active_agents:
+            strat = getattr(agent, "strategy", "default")
+            strat_dist[strat] = strat_dist.get(strat, 0) + 1
+
+        # 2. Fitness function: accuracy, energy efficiency, and diversity bonus
+        def calculate_fitness(agent):
+            accuracy = 1.0 / (agent.failures_count + 1)
+            energy_efficiency = agent.energy / agent.max_energy
+            
+            strat = getattr(agent, "strategy", "default")
+            strategy_ratio = strat_dist.get(strat, 1) / max(1, len(active_agents))
+            diversity_bonus = 1.0 - strategy_ratio
+            
+            return 0.5 * accuracy + 0.3 * energy_efficiency + 0.2 * diversity_bonus
+
+        # Sort active agents by fitness descending
+        active_agents.sort(key=calculate_fitness, reverse=True)
+
+        # 3. Natural Selection: Prune bottom 25% of weak agents if under stress
+        prune_cutoff = max(1, int(len(active_agents) * 0.25))
+        for weak_agent in active_agents[-prune_cutoff:]:
+            if weak_agent.energy < 40:
+                print(f"[Evolutionary Selection] Pruning weak agent {weak_agent.agent_id} due to low fitness / energy.")
+                if weak_agent.agent_id in self.agents:
+                    del self.agents[weak_agent.agent_id]
+                    self.destruction_count += 1
+
+        # 4. Reproduction: Elite top 25% replicate with partial semantic inheritance and mutation operators
+        reproduce_cutoff = max(1, int(len(active_agents) * 0.25))
+        for elite_agent in active_agents[:reproduce_cutoff]:
+            if elite_agent.energy > 125:
+                # Replicate child agent
+                child_id = f"MA-{elite_agent.role}-replica-{random.randint(100, 999)}"
+                print(f"[Evolutionary Selection] Elite agent {elite_agent.agent_id} replicates to child {child_id}.")
+                
+                child = self.create_agent(elite_agent.role, elite_agent.system_prompt)
+                child.strategy = getattr(elite_agent, "strategy", "default")
+                
+                # Dynamic strategy mutation on child
+                operators = ["mutate_strategy", "mutate_threshold", "none"]
+                op = random.choice(operators)
+                if op == "mutate_strategy":
+                    from cognitive_strategy import ReasoningParadigm
+                    child.strategy = random.choice([
+                        ReasoningParadigm.SYMBOLIC,
+                        ReasoningParadigm.ADVERSARIAL,
+                        ReasoningParadigm.DECOMPOSITION,
+                        ReasoningParadigm.ANALOGICAL
+                    ])
+                    print(f"  [Mutation Operator] Child mutated strategy gene to '{child.strategy}'")
+                elif op == "mutate_threshold":
+                    # Mutate local failures threshold
+                    child.max_failures = random.choice([2, 3, 4])
+                    print(f"  [Mutation Operator] Child mutated failures threshold to {child.max_failures}")
+
+                # Inherit semantic memory reference, not episodic raw contamination
+                child.memory.vector_store = elite_agent.memory.vector_store
+                elite_agent.adjust_energy(-40) # Metabolic division cost
 
     def create_agent(self, role, system_prompt):
         """
@@ -60,7 +136,8 @@ class TreeController:
             agent_id=agent_id,
             role=role,
             system_prompt=system_prompt,
-            client=self.client
+            client=self.client,
+            somatic_memory=self.somatic_memory
         )
         
         self.agents[agent_id] = agent
@@ -198,11 +275,13 @@ class TreeController:
                 break
 
             answer = result["text"].strip()
-            is_correct = verifier_fn(answer)
+            from cognitive_verifier import CognitiveVerifier
+            verifier = CognitiveVerifier()
+            is_correct, status_msg, exec_meta = verifier.verify_solution(problem, answer, verifier_fn)
             
             # Record the attempt locally (Restricted Autonomy loop)
-            feedback = "Correct!" if is_correct else "Incorrect answer. Re-evaluate your logical steps."
-            primary_solver.record_attempt(answer, feedback, is_correct)
+            feedback = status_msg
+            primary_solver.record_attempt(answer, feedback, is_correct, prompt=problem)
             
             if is_correct:
                 print(f"[Vascular System] Primary solver successfully solved the task!")
@@ -262,7 +341,9 @@ class TreeController:
             print(f"[Assembly] Aggregator produced answer: '{assembly_answer}' with confidence {confidence}%")
             
             if confidence >= 90:
-                is_correct = verifier_fn(assembly_answer)
+                from cognitive_verifier import CognitiveVerifier
+                verifier = CognitiveVerifier()
+                is_correct, status_msg, exec_meta = verifier.verify_solution(problem, assembly_answer, verifier_fn)
                 if is_correct:
                     print(f"[Assembly] Assembly solved the task correctly (Confidence={confidence}% >= 90%).")
                     generator.adjust_energy(15)
