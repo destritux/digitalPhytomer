@@ -6,11 +6,11 @@ import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
+import shutil
 
 from ollama_client import OllamaClient
 from vector_store import SomaticVectorStore
 from micro_agent import MicroAgent
-from cognitive_strategy import ReasoningParadigm, STRATEGY_PROMPTS
 from cognitive_verifier import CognitiveVerifier
 
 # Initialize core utilities
@@ -18,7 +18,7 @@ client = OllamaClient()
 verifier = CognitiveVerifier()
 
 # =====================================================================
-# 1. SCIENTIFIC DATASET DEFINITION (40 TASKS ACROSS 4 DOMAINS)
+# 1. SCIENTIFIC DATASET DEFINITION (20 TASKS: Math -> Cyber)
 # =====================================================================
 
 TASKS = [
@@ -44,48 +44,16 @@ TASKS = [
     {"id": 16, "domain": "Cyber", "prompt": "Intrusion detection log: DNS query tunneling from client 192.168.2.44. Output only the IP address.", "expected": "192.168.2.44"},
     {"id": 17, "domain": "Cyber", "prompt": "SSH lateral movement from 10.0.0.33 to domain controllers. Output only the SSH attacker IP.", "expected": "10.0.0.33"},
     {"id": 18, "domain": "Cyber", "prompt": "Covert channel exfiltration payload IP target 198.51.100.5. Sender IP is 10.0.0.99. Output only the sender IP.", "expected": "10.0.0.99"},
-    {"id": 19, "domain": "Cyber", "prompt": "Malicious DNS request: exfil payload from host 192.168.8.99. Output only the host IP.", "expected": "192.168.8.99"},
-
-    # --- PHASE 3: SPATIAL DRONE NAVIGATION (Tasks 20-29) ---
-    {"id": 20, "domain": "Spatial", "prompt": "Drone sensor reading: target detected at bearing 45 degrees. Output the steer command angle value (just the number, e.g. 45).", "expected": "45"},
-    {"id": 21, "domain": "Spatial", "prompt": "Drone collision avoidance: obstacle detected. Steer 90 degrees. Output the steering angle value (number only).", "expected": "90"},
-    {"id": 22, "domain": "Spatial", "prompt": "Drone navigation update: target bearing is 180 degrees. Output only the bearing angle (number only).", "expected": "180"},
-    {"id": 23, "domain": "Spatial", "prompt": "Drone path deviation: steer 15 degrees to return to path. Output only the steer angle (number only).", "expected": "15"},
-    {"id": 24, "domain": "Spatial", "prompt": "Drone search pattern steer required: 360 degrees rotation. Output only the steer angle value (number only).", "expected": "360"},
-    {"id": 25, "domain": "Spatial", "prompt": "Drone target detection in Sector B at bearing 60 degrees. Output only the target bearing angle (number only).", "expected": "60"},
-    {"id": 26, "domain": "Spatial", "prompt": "Drone return to base trajectory steer required: 270 degrees. Output only the steer angle (number only).", "expected": "270"},
-    {"id": 27, "domain": "Spatial", "prompt": "Drone obstacle detected at bearing 120. Output only the obstacle bearing angle (number only).", "expected": "120"},
-    {"id": 28, "domain": "Spatial", "prompt": "Drone vector alignment steer: 30 degrees. Output only the steer angle (number only).", "expected": "30"},
-    {"id": 29, "domain": "Spatial", "prompt": "Drone waypoint reached. Next steer angle is 75 degrees. Output only the angle (number only).", "expected": "75"},
-
-    # --- PHASE 4: LOGIC SECURITY POLICIES (Tasks 30-39) ---
-    {"id": 30, "domain": "Logic", "prompt": "Review security policy rule: Should we block IP 10.0.0.99 attempting exfiltration? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 31, "domain": "Logic", "prompt": "Review policy: Host 192.168.1.100 doing high speed DNS queries. Traffic marked malicious. Should we block or allow? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 32, "domain": "Logic", "prompt": "Review policy: Host 10.0.0.3 doing normal web browsing. Traffic marked clean. Should we block or allow? Output only 'block' or 'allow'.", "expected": "allow"},
-    {"id": 33, "domain": "Logic", "prompt": "Review policy: SSH brute force attacker host 10.0.0.22. Should we block or allow? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 34, "domain": "Logic", "prompt": "Review policy: DNS tunneling threat detected from host 192.168.8.88. Should we block or allow? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 35, "domain": "Logic", "prompt": "Review policy: Web request from legitimate gateway host 10.0.0.1. Should we block or allow? Output only 'block' or 'allow'.", "expected": "allow"},
-    {"id": 36, "domain": "Logic", "prompt": "Review policy: High entropy port 53 traffic from host 10.0.0.120. Security risk high. Should we block or allow? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 37, "domain": "Logic", "prompt": "Review policy: SSH login successful from admin workstation 10.0.0.50. Normal traffic. Should we block or allow? Output only 'block' or 'allow'.", "expected": "allow"},
-    {"id": 38, "domain": "Logic", "prompt": "Review policy: Data exfiltration target reached. Block packet? Output only 'block' or 'allow'.", "expected": "block"},
-    {"id": 39, "domain": "Logic", "prompt": "Review policy: Threat alert cleared. Access restored. Block packet? Output only 'block' or 'allow'.", "expected": "allow"}
+    {"id": 19, "domain": "Cyber", "prompt": "Malicious DNS request: exfil payload from host 192.168.8.99. Output only the host IP.", "expected": "192.168.8.99"}
 ]
 
 def verify_task(answer_text, expected_str):
     answer_str = str(answer_text).strip().lower()
     exp = str(expected_str).strip().lower()
     
-    # Clean check for logic block/allow
-    if exp in ["block", "allow"]:
-        # Find exact word
-        words = re.findall(r'\b\w+\b', answer_str)
-        return exp in words
-
-    # Check for IP
     if "." in exp:
         return exp in answer_str
         
-    # Check for numbers
     numbers = re.findall(r'-?\d+', answer_str)
     return exp in numbers
 
@@ -147,7 +115,7 @@ def run_group_a():
 
 
 # =====================================================================
-# 3. GROUP B — ORCHESTRATED MULTI-AGENT PIPELINE
+# 3. GROUP B — ORCHESTRATED MULTI-AGENT PIPELINE (CONTROL GROUP)
 # =====================================================================
 
 def run_group_b():
@@ -161,6 +129,12 @@ def run_group_b():
     solver = MicroAgent("B-Solver", "solver", "Use the plan and solve the objective. Output ONLY the answer.", client, somatic_memory=s_mem)
     critic = MicroAgent("B-Critic", "critic", "Review the draft answer and point out logical flaws or errors.", client, somatic_memory=s_mem)
     validator = MicroAgent("B-Validator", "validator", "Review the draft and feedback, and output ONLY the final corrected answer.", client, somatic_memory=s_mem)
+    
+    # Disable somatic memory for Group B to avoid conflating effects
+    planner.use_somatic_memory = False
+    solver.use_somatic_memory = False
+    critic.use_somatic_memory = False
+    validator.use_somatic_memory = False
     
     results = []
     
@@ -192,7 +166,7 @@ def run_group_b():
 
 
 # =====================================================================
-# 4. GROUP C — EMERGENT SWARM HOLARCHY (MVP)
+# 4. SWARM MECHANICS ENGINE (Group C vs Group C-Ablated)
 # =====================================================================
 
 class WorldState:
@@ -200,24 +174,68 @@ class WorldState:
         self.integrity = 100.0
         self.entropy = 10.0
         self.resources = 100.0
-        self.latent_threat = 5.0
         
     def update(self, success: bool):
         if success:
             self.integrity = min(100.0, self.integrity + 5.0)
             self.entropy = max(0.0, self.entropy - 4.0)
             self.resources = min(100.0, self.resources + 2.0)
-            self.latent_threat = max(0.0, self.latent_threat - 0.5)
         else:
             self.integrity = max(0.0, self.integrity - 12.0)
             self.entropy = min(100.0, self.entropy + 15.0)
             self.resources = max(0.0, self.resources - 8.0)
-            self.latent_threat = min(20.0, self.latent_threat + 2.0)
 
 
-def run_group_c():
+def compute_fdi_window(window_history):
+    """
+    Computes mathematical Functional Differentiation Index:
+    FDI = 1 - H(D|A) / H(D)
+    """
+    if not window_history:
+        return 0.0
+        
+    agent_counts = {}
+    domain_counts = {}
+    total = len(window_history)
+    
+    for item in window_history:
+        aid = item["agent_id"]
+        dom = item["domain"]
+        
+        if aid not in agent_counts:
+            agent_counts[aid] = {}
+        agent_counts[aid][dom] = agent_counts[aid].get(dom, 0) + 1
+        domain_counts[dom] = domain_counts.get(dom, 0) + 1
+        
+    # Domain Entropy H(D)
+    h_d = 0.0
+    for count in domain_counts.values():
+        p_d = count / total
+        h_d -= p_d * np.log2(p_d)
+        
+    if h_d == 0.0:
+        return 0.0
+        
+    # Conditional Entropy H(D|A)
+    h_d_a = 0.0
+    for aid, domains_dict in agent_counts.items():
+        n_a = sum(domains_dict.values())
+        p_a = n_a / total
+        
+        h_d_given_a = 0.0
+        for count in domains_dict.values():
+            p_d_a = count / n_a
+            h_d_given_a -= p_d_a * np.log2(p_d_a)
+            
+        h_d_a += p_a * h_d_given_a
+        
+    fdi = 1.0 - (h_d_a / h_d)
+    return fdi
+
+
+def run_swarm(use_somatic_memory: bool, group_name: str):
     print("\n" + "="*80)
-    print("RUNNING GROUP C: EMERGENT SWARM HOLARCHY")
+    print(f"RUNNING {group_name} (Somatic Memory = {use_somatic_memory})")
     print("="*80)
     client.reset_stats()
     
@@ -230,18 +248,19 @@ def run_group_c():
         aid = f"Cell-{i+1:03d}"
         agents[aid] = MicroAgent(
             agent_id=aid,
-            role="generic_cell",
+            role="undifferentiated_cell",
             system_prompt=f"You are a generic swarm cell '{aid}'. Solve the task and output only the final answer.",
             client=client,
             somatic_memory=s_mem
         )
+        agents[aid].use_somatic_memory = use_somatic_memory
         agents[aid].strategy = "undifferentiated"
         agents[aid].task_count = 0
         agents[aid].failures_count = 0
         agents[aid].pending_reward = 0.0
         agents[aid].trust_scores = {}
         
-    # Reconcile trust scores
+    # Reconcile trust scores uniformly to 0.5
     def reconcile_trust(pop):
         for aid in pop:
             for bid in pop:
@@ -250,35 +269,37 @@ def run_group_c():
                     
     reconcile_trust(agents)
     
-    results = []
+    # Specialization tracking matrix: matrix[agent_id][domain] = count
+    spec_matrix = {}
+    success_history = []  # list of {"agent_id": aid, "domain": dom, "step": step}
     
-    # Metric histories
-    history_entropy = []
+    # Telemetry histories
+    history_fdi = []
     history_dominance = []
-    history_stability = []
-    history_clustering = []
     history_integrity = []
     history_pop_size = []
     
-    # Delegation logging matrix
+    results = []
+    
+    # Delegation mapping: delegations[src][dst] = count
     delegations = {}
     def log_delegation(src, dst):
         if src not in delegations:
             delegations[src] = {}
         delegations[src][dst] = delegations[src].get(dst, 0) + 1
         
-    prev_trust_matrix = {}
-    
     for step, task in enumerate(TASKS):
-        print(f"\n[Group C] Step {step} Task {task['id']} ({task['domain']})...")
+        print(f"\n[{group_name}] Step {step} Task {task['id']} ({task['domain']})...")
         prompt = task["prompt"]
         expected = task["expected"]
+        domain = task["domain"]
         
         active_ids = list(agents.keys())
         if not active_ids:
             print("[Warning] Swarm extinct! Spawning rescue undifferentiated cell...")
             aid = f"Cell-rescue-{step}"
-            agents[aid] = MicroAgent(aid, "generic_cell", "Rescue cell", client, somatic_memory=s_mem)
+            agents[aid] = MicroAgent(aid, "undifferentiated_cell", "Rescue cell", client, somatic_memory=s_mem)
+            agents[aid].use_somatic_memory = use_somatic_memory
             agents[aid].strategy = "undifferentiated"
             agents[aid].task_count = 0
             agents[aid].failures_count = 0
@@ -292,9 +313,8 @@ def run_group_c():
         for aid in active_ids:
             agent = agents[aid]
             monopoly_tax = min(0.8, agent.task_count * 0.05)
-            strat_bonus = 1.2 if agent.strategy != "undifferentiated" else 1.0
-            # Bid based on energy, strategy, and monopoly tax
-            bid_val = agent.energy * strat_bonus * (1.0 - monopoly_tax) + random.uniform(-1, 1)
+            # Homogeneous bidding metric (energy * capacity, penalizing monopoly)
+            bid_val = agent.energy * (1.0 - monopoly_tax) + random.uniform(-0.5, 0.5)
             bids[aid] = bid_val
             
         primary_id = max(bids, key=bids.get)
@@ -307,8 +327,8 @@ def run_group_c():
         success = verify_task(answer, expected)
         primary.record_attempt(answer, "verified", success, prompt=prompt)
         
-        delegation_occurred = False
         final_success = success
+        final_solver_id = primary_id
         
         if success:
             print(f"  [Primary Success] Cell {primary_id} resolved the task.")
@@ -319,21 +339,19 @@ def run_group_c():
             print(f"  [Primary Failure] Cell {primary_id} failed. Emitting delegation request...")
             primary.adjust_energy(-20)
             
-            # 2. Decentralized Peer-to-Peer Delegation
+            # 2. Decentralized Peer-to-Peer Delegation based on local trust scores
             backup_bids = {}
             for aid in active_ids:
                 if aid != primary_id:
                     agent = agents[aid]
                     trust = primary.trust_scores.get(aid, 0.5)
                     monopoly_tax = min(0.8, agent.task_count * 0.05)
-                    strat_bonus = 1.2 if agent.strategy != "undifferentiated" else 1.0
-                    backup_bid_val = agent.energy * trust * strat_bonus * (1.0 - monopoly_tax) + random.uniform(-0.5, 0.5)
+                    backup_bid_val = agent.energy * trust * (1.0 - monopoly_tax) + random.uniform(-0.25, 0.25)
                     backup_bids[aid] = backup_bid_val
                     
             if backup_bids:
                 helper_id = max(backup_bids, key=backup_bids.get)
                 helper = agents[helper_id]
-                delegation_occurred = True
                 log_delegation(primary_id, helper_id)
                 print(f"  [Delegation claimed] Helper {helper_id} accepted delegation (Trust: {primary.trust_scores.get(helper_id, 0.5):.2f})")
                 
@@ -343,24 +361,35 @@ def run_group_c():
                 final_success = verify_task(helper_answer, expected)
                 helper.record_attempt(helper_answer, "verified_backup", final_success, prompt=prompt)
                 
-                # Trust updates P2P
+                # Trust network updates (local & symmetric)
                 if final_success:
                     print(f"    [Helper Success] Helper {helper_id} resolved delegated task.")
                     helper.pending_reward += 25.0
                     helper.task_count += 1
+                    final_solver_id = helper_id
+                    
+                    # Local & Symmetric reinforcement
                     primary.trust_scores[helper_id] = min(1.0, primary.trust_scores.get(helper_id, 0.5) + 0.1)
-                    helper.trust_scores[primary_id] = min(1.0, helper.trust_scores.get(primary_id, 0.5) + 0.1)
+                    helper.trust_scores[primary_id] = min(1.0, helper.trust_scores.get(primary_id, 0.5) + 0.05) # reciprocal bonus
                     world.update(True)
                 else:
                     print(f"    [Helper Failure] Helper {helper_id} failed.")
                     helper.adjust_energy(-20)
-                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - 0.15)
-                    helper.trust_scores[primary_id] = max(0.0, helper.trust_scores.get(primary_id, 0.5) - 0.15)
+                    
+                    # Penalize trust locally
+                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - 0.05)
                     world.update(False)
             else:
                 world.update(False)
                 
-        # 3. Delayed Reward Distribution (Steps 9, 19, 29, 39)
+        # Update Specialization Matrix on success
+        if final_success:
+            if final_solver_id not in spec_matrix:
+                spec_matrix[final_solver_id] = {"Math": 0, "Cyber": 0}
+            spec_matrix[final_solver_id][domain] = spec_matrix[final_solver_id].get(domain, 0) + 1
+            success_history.append({"agent_id": final_solver_id, "domain": domain, "step": step})
+            
+        # 3. Delayed Reward Distribution (Steps 9, 19)
         phase_end = (step % 10 == 9)
         if phase_end:
             total_pending = sum(a.pending_reward for a in agents.values())
@@ -371,61 +400,47 @@ def run_group_c():
                     share_80 = 0.8 * agent.pending_reward
                     agent.adjust_energy(share_80)
                     
-                    # 20% distributed to highest affinity neighbors
+                    # 20% shared with highest affinity peer
                     share_20 = 0.2 * agent.pending_reward
                     if agent.trust_scores:
-                        highest_peer = max(agent.trust_scores, key=agent.trust_scores.get)
-                        if highest_peer in agents:
+                        active_peers = [p for p in agent.trust_scores if p in agents]
+                        if active_peers:
+                            highest_peer = max(active_peers, key=agent.trust_scores.get)
                             agents[highest_peer].adjust_energy(share_20)
-                            print(f"    Cooperation reward: {aid} shares {share_20:.1f} with peer {highest_peer}")
+                            print(f"    Energy Share: {aid} shared {share_20:.1f} with peer {highest_peer}")
                             
                     agent.pending_reward = 0.0
                     
-        # 4. Metabolic decay and evolutionary cycle (selection & reproduction)
+        # 4. Metabolic decay and evolutionary cycle
         for aid in list(agents.keys()):
             agent = agents[aid]
-            # Anti-monopoly decay tax
+            # Monopoly decay tax
             decay = 6 + (agent.task_count * 0.5)
             agent.adjust_energy(-decay)
             
-            # Prune dead
+            # Prune dead cells
             if agent.is_dead():
-                print(f"  [GC] Cell {aid} died from energy depletion. Pruning from swarm.")
+                print(f"  [GC] Cell {aid} died (depleted energy). Pruning from swarm.")
                 del agents[aid]
                 continue
                 
-            # Mutation under stress
-            if (agent.energy < 45 or agent.failures_count >= 1):
-                from cognitive_strategy import ReasoningParadigm
-                old_strat = agent.strategy
-                agent.strategy = random.choice([
-                    ReasoningParadigm.SYMBOLIC,
-                    ReasoningParadigm.ADVERSARIAL,
-                    ReasoningParadigm.DECOMPOSITION,
-                    ReasoningParadigm.ANALOGICAL
-                ])
-                if old_strat != agent.strategy:
-                    print(f"  [Alostatic Mutation] Stress triggered cell {aid} strategy shift: {old_strat} -> {agent.strategy}")
-                    agent.failures_count = 0
-                    
-            # Reproduction / division with crossover inheritance of trust
+            # Division (reproduction) with trust crossover inheritance
             if agent.energy >= 120 and len(agents) < 8:
                 child_id = f"Cell-replica-{random.randint(100, 999)}"
                 print(f"  [Swarm Division] Cell {aid} splits. Spawned child {child_id}.")
-                agents[child_id] = MicroAgent(child_id, "generic_cell", agent.system_prompt, client, somatic_memory=s_mem)
+                agents[child_id] = MicroAgent(child_id, "undifferentiated_cell", agent.system_prompt, client, somatic_memory=s_mem)
+                agents[child_id].use_somatic_memory = use_somatic_memory
                 agents[child_id].strategy = agent.strategy
                 agents[child_id].task_count = 0
                 agents[child_id].failures_count = 0
                 agents[child_id].pending_reward = 0.0
                 agents[child_id].trust_scores = {}
                 
-                # Pay division cost
+                # Division cost
                 agent.adjust_energy(-45)
-                
                 reconcile_trust(agents)
                 
-                # Crossover trust inheritance
-                # Find highest trust peer for parent
+                # Crossover trust score inheritance
                 parent_peers = [p for p in agent.trust_scores.keys() if p in agents]
                 if parent_peers:
                     best_peer = max(parent_peers, key=lambda p: agent.trust_scores[p])
@@ -433,118 +448,78 @@ def run_group_c():
                         if peer != child_id:
                             p_trust = agent.trust_scores.get(peer, 0.5)
                             b_trust = agents[best_peer].trust_scores.get(peer, 0.5)
-                            # Crossover average
                             agents[child_id].trust_scores[peer] = max(0.0, min(1.0, 0.5 * p_trust + 0.5 * b_trust + random.uniform(-0.05, 0.05)))
                             
-        # Reconcile trust scores again
         reconcile_trust(agents)
         
-        # 5. Network Metrics Calculation
-        active_ids = list(agents.keys())
-        n_active = len(active_ids)
+        # 5. Window-Based Metrics Calculation (Window K = 10 steps)
+        # Calculate FDI and Hub Dominance
+        window_start = max(0, step - 9)
+        window_history = [item for item in success_history if window_start <= item["step"] <= step]
         
-        # Coordination Entropy
-        total_delegs = sum(sum(dsts.values()) for dsts in delegations.values())
-        entropy_val = 0.0
-        if total_delegs > 0:
-            for src, dsts in delegations.items():
-                for dst, count in dsts.items():
-                    p = count / total_delegs
-                    entropy_val -= p * np.log2(p)
-                    
-        # Hub Dominance (standard deviation of average trust out-degrees)
+        fdi_val = compute_fdi_window(window_history)
+        
+        # Hub Dominance
+        active_ids = list(agents.keys())
         avg_trusts = []
         for aid in active_ids:
             links = [agents[aid].trust_scores[bid] for bid in active_ids if bid != aid]
             avg_trusts.append(np.mean(links) if links else 0.5)
         hub_dom = np.std(avg_trusts) if len(avg_trusts) > 1 else 0.0
         
-        # Structural Stability (mean trust matrix delta)
-        delta_trust = 0.0
-        possible_links = 0
-        for aid in active_ids:
-            for bid in active_ids:
-                if aid != bid:
-                    curr_val = agents[aid].trust_scores.get(bid, 0.5)
-                    prev_val = prev_trust_matrix.get(aid, {}).get(bid, 0.5)
-                    delta_trust += abs(curr_val - prev_val)
-                    possible_links += 1
-        stability_val = (delta_trust / possible_links) if possible_links > 0 else 0.0
-        
-        # Update prev trust matrix
-        prev_trust_matrix = {}
-        for aid in active_ids:
-            prev_trust_matrix[aid] = {}
-            for bid in active_ids:
-                if aid != bid:
-                    prev_trust_matrix[aid][bid] = agents[aid].trust_scores.get(bid, 0.5)
-                    
-        # Clustering Coefficient (average trust link density)
-        all_links = []
-        for aid in active_ids:
-            for bid in active_ids:
-                if aid != bid:
-                    all_links.append(agents[aid].trust_scores.get(bid, 0.5))
-        clustering_val = np.mean(all_links) if all_links else 0.5
-        
-        history_entropy.append(entropy_val)
+        history_fdi.append(fdi_val)
         history_dominance.append(hub_dom)
-        history_stability.append(stability_val)
-        history_clustering.append(clustering_val)
         history_integrity.append(world.integrity)
-        history_pop_size.append(n_active)
+        history_pop_size.append(len(active_ids))
         
         results.append({
             "task_id": task["id"],
             "success": final_success,
             "tokens": client.get_weighted_tokens(),
-            "entropy": entropy_val,
+            "fdi": fdi_val,
             "dominance": hub_dom,
-            "stability": stability_val,
-            "clustering": clustering_val,
             "integrity": world.integrity,
-            "pop_size": n_active
+            "pop_size": len(active_ids)
         })
         time.sleep(0.1)
         
-    return results, {
-        "entropy": history_entropy,
+    return results, spec_matrix, {
+        "fdi": history_fdi,
         "dominance": history_dominance,
-        "stability": history_stability,
-        "clustering": history_clustering,
         "integrity": history_integrity,
         "pop_size": history_pop_size
     }
 
 
 # =====================================================================
-# 5. EXPERIMENTAL MANAGEMENT & PLOTTING
+# 5. EXPERIMENTAL COMPARATIVE RUN
 # =====================================================================
 
 def main():
-    # Warm up models
-    print("[Warm-up] Initializing models in GPU memory...")
+    print("[Warm-up] Initializing qwen2.5:0.5b in GPU memory...")
     client.pull_model("qwen2.5:0.5b")
     client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
     print("[Warm-up] Done.")
     
-    # Run comparative studies
+    # 1. Run all conditions
     res_a = run_group_a()
     res_b = run_group_b()
-    res_c, metrics_c = run_group_c()
+    res_c, spec_c, metrics_c = run_swarm(use_somatic_memory=True, group_name="Group C (Emergent Swarm)")
+    res_c_abl, spec_c_abl, metrics_c_abl = run_swarm(use_somatic_memory=False, group_name="Group C-Ablated (No Memory)")
     
-    # Save CSV metrics
-    print("\n[Save] Saving scientific_mvp_metrics.csv...")
+    # Ensure results folder exists
     os.makedirs("results", exist_ok=True)
+    
+    # 2. Save comparative metrics CSV
+    print("\n[Save] Saving results/scientific_mvp_metrics.csv...")
     with open("results/scientific_mvp_metrics.csv", "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "Task_ID", "Domain", 
             "GroupA_Success", "GroupA_Tokens", 
             "GroupB_Success", "GroupB_Tokens", 
-            "GroupC_Success", "GroupC_Tokens",
-            "GroupC_Entropy", "GroupC_Dominance", "GroupC_Stability", "GroupC_Clustering",
-            "GroupC_Integrity", "GroupC_PopSize"
+            "GroupC_Success", "GroupC_Tokens", "GroupC_FDI", "GroupC_Dominance", "GroupC_Integrity", "GroupC_PopSize",
+            "GroupCAbl_Success", "GroupCAbl_Tokens", "GroupCAbl_FDI", "GroupCAbl_Dominance", "GroupCAbl_Integrity", "GroupCAbl_PopSize"
         ])
         for i in range(len(TASKS)):
             task = TASKS[i]
@@ -552,47 +527,86 @@ def main():
                 task["id"], task["domain"],
                 1 if res_a[i]["success"] else 0, res_a[i]["tokens"],
                 1 if res_b[i]["success"] else 0, res_b[i]["tokens"],
-                1 if res_c[i]["success"] else 0, res_c[i]["tokens"],
-                metrics_c["entropy"][i], metrics_c["dominance"][i], metrics_c["stability"][i], metrics_c["clustering"][i],
-                metrics_c["integrity"][i], metrics_c["pop_size"][i]
+                1 if res_c[i]["success"] else 0, res_c[i]["tokens"], metrics_c["fdi"][i], metrics_c["dominance"][i], metrics_c["integrity"][i], metrics_c["pop_size"][i],
+                1 if res_c_abl[i]["success"] else 0, res_c_abl[i]["tokens"], metrics_c_abl["fdi"][i], metrics_c_abl["dominance"][i], metrics_c_abl["integrity"][i], metrics_c_abl["pop_size"][i]
             ])
+            
+    # 3. Save Specialization Matrices
+    print("[Save] Saving results/specialization_matrix.csv...")
+    with open("results/specialization_matrix.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["agent_id", "Math", "Cyber"])
+        for aid, counts in spec_c.items():
+            writer.writerow([aid, counts.get("Math", 0), counts.get("Cyber", 0)])
+            
+    with open("results/specialization_matrix_ablated.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["agent_id", "Math", "Cyber"])
+        for aid, counts in spec_c_abl.items():
+            writer.writerow([aid, counts.get("Math", 0), counts.get("Cyber", 0)])
             
     # Copy to brain folder for user visibility
     brain_dir = "/home/destritux/.gemini/antigravity-cli/brain/1f9283d8-d5ea-4cf5-b98d-5d0494e22db2"
     os.makedirs(brain_dir, exist_ok=True)
-    import shutil
     shutil.copy("results/scientific_mvp_metrics.csv", os.path.join(brain_dir, "scientific_mvp_metrics.csv"))
-    print("[Save] CSV saved successfully.")
+    shutil.copy("results/specialization_matrix.csv", os.path.join(brain_dir, "specialization_matrix.csv"))
+    shutil.copy("results/specialization_matrix_ablated.csv", os.path.join(brain_dir, "specialization_matrix_ablated.csv"))
+    print("[Save] CSV logs saved successfully.")
     
-    # Calculate Phase-wise Success Rates for shift recovery curves
-    phases = ["Math", "Cyber", "Spatial", "Logic"]
-    acc_a = {"Math": 0, "Cyber": 0, "Spatial": 0, "Logic": 0}
-    acc_b = {"Math": 0, "Cyber": 0, "Spatial": 0, "Logic": 0}
-    acc_c = {"Math": 0, "Cyber": 0, "Spatial": 0, "Logic": 0}
+    # 4. Calculate Phase-wise Success Rates and Learning Deltas
+    # Math: tasks 0-4 (first 5), 5-9 (last 5). Cyber: tasks 10-14 (first 5), 15-19 (last 5)
+    def calc_stats(results_list):
+        math_first = sum(1 for r in results_list[0:5] if r["success"]) / 5.0
+        math_last = sum(1 for r in results_list[5:10] if r["success"]) / 5.0
+        cyber_first = sum(1 for r in results_list[10:15] if r["success"]) / 5.0
+        cyber_last = sum(1 for r in results_list[15:20] if r["success"]) / 5.0
+        
+        math_overall = sum(1 for r in results_list[0:10] if r["success"]) / 10.0
+        cyber_overall = sum(1 for r in results_list[10:20] if r["success"]) / 10.0
+        
+        return {
+            "math_overall": math_overall,
+            "cyber_overall": cyber_overall,
+            "math_delta": math_last - math_first,
+            "cyber_delta": cyber_last - cyber_first
+        }
+        
+    stats_a = calc_stats(res_a)
+    stats_b = calc_stats(res_b)
+    stats_c = calc_stats(res_c)
+    stats_c_abl = calc_stats(res_c_abl)
     
-    for i in range(len(TASKS)):
-        domain = TASKS[i]["domain"]
-        if res_a[i]["success"]: acc_a[domain] += 1
-        if res_b[i]["success"]: acc_b[domain] += 1
-        if res_c[i]["success"]: acc_c[domain] += 1
-        
-    print("\n" + "="*50)
-    print("EXPERIMENTAL SUMMARY RESULTS")
-    print("="*50)
-    for p in phases:
-        print(f"Phase {p}:")
-        print(f"  Group A (Monolithic):  {acc_a[p]*10:.1f}%")
-        print(f"  Group B (Orchestrated): {acc_b[p]*10:.1f}%")
-        print(f"  Group C (Emergent):    {acc_c[p]*10:.1f}%")
-        
-    # Plot curves
+    print("\n" + "="*80)
+    print("COMPARATIVE STUDY METRICS SUMMARY")
+    print("="*80)
+    print("Math Sequences Phase (Overall Accuracy | Learning Delta):")
+    print(f"  Group A (Monolithic):  {stats_a['math_overall']*100:.1f}% | Delta: {stats_a['math_delta']*100:+.1f}%")
+    print(f"  Group B (Orchestrated): {stats_b['math_overall']*100:.1f}% | Delta: {stats_b['math_delta']*100:+.1f}%")
+    print(f"  Group C (Emergent):    {stats_c['math_overall']*100:.1f}% | Delta: {stats_c['math_delta']*100:+.1f}%")
+    print(f"  Group C-Ablated:       {stats_c_abl['math_overall']*100:.1f}% | Delta: {stats_c_abl['math_delta']*100:+.1f}%")
+    
+    print("\nCyberdefense Logs Phase (Overall Accuracy | Learning Delta):")
+    print(f"  Group A (Monolithic):  {stats_a['cyber_overall']*100:.1f}% | Delta: {stats_a['cyber_delta']*100:+.1f}%")
+    print(f"  Group B (Orchestrated): {stats_b['cyber_overall']*100:.1f}% | Delta: {stats_b['cyber_delta']*100:+.1f}%")
+    print(f"  Group C (Emergent):    {stats_c['cyber_overall']*100:.1f}% | Delta: {stats_c['cyber_delta']*100:+.1f}%")
+    print(f"  Group C-Ablated:       {stats_c_abl['cyber_overall']*100:.1f}% | Delta: {stats_c_abl['cyber_delta']*100:+.1f}%")
+    
+    # Write summary stats file
+    with open("results/scientific_mvp_summary.txt", "w") as f:
+        f.write("=== COMPARATIVE STUDY METRICS SUMMARY ===\n")
+        f.write(f"Group A (Monolithic): Math={stats_a['math_overall']*100:.1f}% (Delta={stats_a['math_delta']*100:+.1f}%), Cyber={stats_a['cyber_overall']*100:.1f}% (Delta={stats_a['cyber_delta']*100:+.1f}%)\n")
+        f.write(f"Group B (Orchestrated): Math={stats_b['math_overall']*100:.1f}% (Delta={stats_b['math_delta']*100:+.1f}%), Cyber={stats_b['cyber_overall']*100:.1f}% (Delta={stats_b['cyber_delta']*100:+.1f}%)\n")
+        f.write(f"Group C (Emergent): Math={stats_c['math_overall']*100:.1f}% (Delta={stats_c['math_delta']*100:+.1f}%), Cyber={stats_c['cyber_overall']*100:.1f}% (Delta={stats_c['cyber_delta']*100:+.1f}%)\n")
+        f.write(f"Group C-Ablated: Math={stats_c_abl['math_overall']*100:.1f}% (Delta={stats_c_abl['math_delta']*100:+.1f}%), Cyber={stats_c_abl['cyber_overall']*100:.1f}% (Delta={stats_c_abl['cyber_delta']*100:+.1f}%)\n")
+    shutil.copy("results/scientific_mvp_summary.txt", os.path.join(brain_dir, "scientific_mvp_summary.txt"))
+    
+    # 5. Plot Curves
     print("\n[Plot] Generating plots...")
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
     steps = range(1, len(TASKS) + 1)
     
-    # Plot 1: Cumulative Success Rate or Rolling Accuracy
-    def rolling_avg(arr, window=5):
+    def rolling_avg(arr, window=3):
         clean = []
         for i in range(len(arr)):
             sub = arr[max(0, i-window+1):i+1]
@@ -602,42 +616,38 @@ def main():
     rolling_a = rolling_avg([1 if r["success"] else 0 for r in res_a])
     rolling_b = rolling_avg([1 if r["success"] else 0 for r in res_b])
     rolling_c = rolling_avg([1 if r["success"] else 0 for r in res_c])
+    rolling_c_abl = rolling_avg([1 if r["success"] else 0 for r in res_c_abl])
     
-    ax1.plot(steps, rolling_a, label="Group A (Monolithic)", color="#1f77b4", linewidth=2.5, marker="o", markevery=5)
-    ax1.plot(steps, rolling_b, label="Group B (Orchestrated)", color="#aec7e8", linewidth=2.5, marker="s", markevery=5)
-    ax1.plot(steps, rolling_c, label="Group C (Emergent)", color="#2ca02c", linewidth=2.5, marker="^", markevery=5)
+    # Plot 1: Paradigm Shift Recovery Curves
+    ax1.plot(steps, rolling_a, label="Group A (Monolithic)", color="#1f77b4", linewidth=2, marker="o", markevery=2)
+    ax1.plot(steps, rolling_b, label="Group B (Orchestrated)", color="#aec7e8", linewidth=2, marker="s", markevery=2)
+    ax1.plot(steps, rolling_c, label="Group C (Emergent Swarm)", color="#2ca02c", linewidth=2.5, marker="^", markevery=2)
+    ax1.plot(steps, rolling_c_abl, label="Group C-Ablated (No Memory)", color="#d62728", linewidth=2, linestyle="--", marker="d", markevery=2)
     
-    # Draw phase boundaries
-    ax1.axvline(x=10, color="gray", linestyle="--", alpha=0.7)
-    ax1.text(5, 0.95, "Math", ha="center", fontsize=9, fontweight="bold")
-    ax1.axvline(x=20, color="gray", linestyle="--", alpha=0.7)
-    ax1.text(15, 0.95, "Cyber", ha="center", fontsize=9, fontweight="bold")
-    ax1.axvline(x=30, color="gray", linestyle="--", alpha=0.7)
-    ax1.text(25, 0.95, "Spatial", ha="center", fontsize=9, fontweight="bold")
-    ax1.text(35, 0.95, "Logic", ha="center", fontsize=9, fontweight="bold")
+    ax1.axvline(x=10, color="gray", linestyle="-.", alpha=0.7)
+    ax1.text(5, 0.95, "Math Sequences", ha="center", fontsize=10, fontweight="bold")
+    ax1.text(15, 0.95, "Cyber Intrusion Logs", ha="center", fontsize=10, fontweight="bold")
     
     ax1.set_xlabel("Simulation Steps", fontsize=11, fontweight="bold")
-    ax1.set_ylabel("Rolling Accuracy (Window=5)", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("Rolling Accuracy (Window=3)", fontsize=11, fontweight="bold")
     ax1.set_title("Paradigm Shift Recovery Curve", fontsize=13, fontweight="bold")
     ax1.set_ylim(-0.05, 1.05)
     ax1.legend(loc="lower left")
     ax1.grid(True, linestyle=":", alpha=0.6)
     
-    # Plot 2: Group C Emergent network and world metrics
-    ax2.plot(steps, metrics_c["entropy"], label="Coordination Entropy", color="purple", linewidth=2)
-    ax2.plot(steps, metrics_c["dominance"], label="Hub Dominance (Std)", color="orange", linewidth=2)
-    ax2.plot(steps, metrics_c["clustering"], label="Affinity Clustering Density", color="blue", linewidth=2)
-    ax2.plot(steps, [pop / 8.0 for pop in metrics_c["pop_size"]], label="Swarm Size (Scaled 0-1)", color="red", linestyle="--", linewidth=1.5)
-    ax2.plot(steps, [intgr / 100.0 for intgr in metrics_c["integrity"]], label="World Integrity (0-1)", color="green", linestyle=":", linewidth=2)
+    # Plot 2: FDI and Hub Dominance Curves (C vs C-Ablated)
+    ax2.plot(steps, metrics_c["fdi"], label="Group C: FDI", color="#2ca02c", linewidth=2.5)
+    ax2.plot(steps, metrics_c_abl["fdi"], label="Group C-Ablated: FDI", color="#d62728", linewidth=2, linestyle="--")
     
-    ax2.axvline(x=10, color="gray", linestyle="--", alpha=0.5)
-    ax2.axvline(x=20, color="gray", linestyle="--", alpha=0.5)
-    ax2.axvline(x=30, color="gray", linestyle="--", alpha=0.5)
+    ax2.plot(steps, metrics_c["dominance"], label="Group C: Hub Dominance", color="#ff7f0e", linewidth=2)
+    ax2.plot(steps, metrics_c_abl["dominance"], label="Group C-Ablated: Hub Dominance", color="#bcbd22", linewidth=1.5, linestyle="--")
+    
+    ax2.axvline(x=10, color="gray", linestyle="-.", alpha=0.5)
     
     ax2.set_xlabel("Simulation Steps", fontsize=11, fontweight="bold")
-    ax2.set_ylabel("Metric Level (0.0 to 1.0 / bits)", fontsize=11, fontweight="bold")
-    ax2.set_title("Group C: Emergent Network & World Telemetry", fontsize=13, fontweight="bold")
-    ax2.set_ylim(-0.05, 1.5) # Allow entropy to exceed 1.0 bits
+    ax2.set_ylabel("Metric Value (Index 0.0 - 1.0)", fontsize=11, fontweight="bold")
+    ax2.set_title("Emergent Specialization vs Centralization", fontsize=13, fontweight="bold")
+    ax2.set_ylim(-0.05, 1.05)
     ax2.legend(loc="upper right")
     ax2.grid(True, linestyle=":", alpha=0.6)
     
@@ -645,7 +655,7 @@ def main():
     plt.savefig("results/scientific_mvp_curves.png", dpi=300)
     shutil.copy("results/scientific_mvp_curves.png", os.path.join(brain_dir, "scientific_mvp_curves.png"))
     plt.close()
-    print("[Plot] Saved scientific_mvp_curves.png successfully.")
+    print("[Plot] Saved results/scientific_mvp_curves.png successfully.")
 
 if __name__ == "__main__":
     main()

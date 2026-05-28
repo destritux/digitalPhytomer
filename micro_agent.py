@@ -12,6 +12,7 @@ class MicroAgent:
         self.max_energy = max_energy
         self.failures_count = 0
         self.strategy = "default"
+        self.use_somatic_memory = True
         self.memory = HierarchicalMemory(somatic_memory)
 
     @property
@@ -46,9 +47,10 @@ class MicroAgent:
             prompt_parts.append("=========================================================================\n")
 
         # Retrieve semantic context from somatic vector store
-        semantic_context = self.memory.retrieve_context(problem, self.client)
-        if semantic_context:
-            prompt_parts.append(semantic_context)
+        if self.use_somatic_memory:
+            semantic_context = self.memory.retrieve_context(problem, self.client)
+            if semantic_context:
+                prompt_parts.append(semantic_context)
 
         # Retrieve episodic local attempts
         episodic_context = self.memory.get_memory_context()
