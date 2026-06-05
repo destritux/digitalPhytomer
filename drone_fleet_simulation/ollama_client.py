@@ -1,10 +1,6 @@
 import requests
 import json
-import sys
 import re
-import os
-import hashlib
-import atexit
 
 class OllamaClient:
     def __init__(self, base_url="http://localhost:11434", default_model="qwen2.5:0.5b"):
@@ -14,34 +10,11 @@ class OllamaClient:
         self.total_completion_tokens = 0
         self.total_calls = 0
         self.model_stats = {}
-        self.current_seed = None
-        self.cache_file = "results/llm_cache.json"
-        self.cache = {}
-        self.load_cache()
-        atexit.register(self.save_cache)
-
-    def load_cache(self):
-        try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, "r", encoding="utf-8") as f:
-                    self.cache = json.load(f)
-                print(f"[Ollama Cache] Loaded {len(self.cache)} entries.")
-        except Exception as e:
-            print(f"[Ollama Cache Warning] Failed to load cache: {e}")
-
-    def save_cache(self):
-        try:
-            os.makedirs(os.path.dirname(self.cache_file), exist_ok=True)
-            with open(self.cache_file, "w", encoding="utf-8") as f:
-                json.dump(self.cache, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"[Ollama Cache Warning] Failed to save cache: {e}")
 
     def pull_model(self, model_name=None):
         if model_name is None:
             model_name = self.default_model
         
-        # Check if model is already pulled
         try:
             resp = requests.get(f"{self.base_url}/api/tags")
             if resp.status_code == 200:
@@ -72,33 +45,6 @@ class OllamaClient:
     def generate(self, prompt, system_prompt=None, temperature=0.7, model_name=None, max_tokens=None):
         if model_name is None:
             model_name = self.default_model
-        if max_tokens is None:
-            max_tokens = 256
-
-        # Construir chave única para o cache baseada no prompt, seed, temperatura e modelo
-        seed_val = str(self.current_seed) if self.current_seed is not None else "no_seed"
-        cache_str = f"{prompt}||{system_prompt}||{temperature}||{model_name}||{max_tokens}||{seed_val}"
-        cache_key = hashlib.md5(cache_str.encode('utf-8')).hexdigest()
-
-        if cache_key in self.cache:
-            cached = self.cache[cache_key]
-            
-            # Replicar impacto estatístico nas métricas (telemetria idêntica à execução real)
-            self.total_calls += 1
-            self.total_prompt_tokens += cached["prompt_tokens"]
-            self.total_completion_tokens += cached["completion_tokens"]
-            if model_name not in self.model_stats:
-                self.model_stats[model_name] = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
-            self.model_stats[model_name]["prompt_tokens"] += cached["prompt_tokens"]
-            self.model_stats[model_name]["completion_tokens"] += cached["completion_tokens"]
-            self.model_stats[model_name]["calls"] += 1
-            
-            return {
-                "text": cached["text"],
-                "prompt_tokens": cached["prompt_tokens"],
-                "completion_tokens": cached["completion_tokens"],
-                "success": cached.get("success", True)
-            }
 
         url = f"{self.base_url}/api/generate"
         options = {
@@ -123,11 +69,9 @@ class OllamaClient:
                 result = resp.json()
                 response_text = result.get("response", "")
                 
-                # Retrieve token counts from metadata if available (Ollama provides prompt_eval_count and eval_count)
                 prompt_tokens = result.get("prompt_eval_count", 0)
                 completion_tokens = result.get("eval_count", 0)
                 
-                # Fallback estimation if token counts are 0
                 if prompt_tokens == 0:
                     prompt_tokens = len(prompt.split()) + (len(system_prompt.split()) if system_prompt else 0)
                 if completion_tokens == 0:
@@ -136,21 +80,12 @@ class OllamaClient:
                 self.total_prompt_tokens += prompt_tokens
                 self.total_completion_tokens += completion_tokens
                 
-                # Model-specific tracking
                 if model_name not in self.model_stats:
                     self.model_stats[model_name] = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
                 self.model_stats[model_name]["prompt_tokens"] += prompt_tokens
                 self.model_stats[model_name]["completion_tokens"] += completion_tokens
                 self.model_stats[model_name]["calls"] += 1
                 
-                # Salvar no cache
-                self.cache[cache_key] = {
-                    "text": response_text,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "success": True
-                }
-
                 return {
                     "text": response_text,
                     "prompt_tokens": prompt_tokens,
@@ -165,29 +100,21 @@ class OllamaClient:
             return {"text": "", "prompt_tokens": 0, "completion_tokens": 0, "success": False}
 
     def get_embeddings(self, text, model_name=None):
-        """
-        Generates a robust, collision-resistant 256-dimensional feature hashing vector for text.
-        This provides high accuracy cosine similarity for search and matches, avoiding
-        representation collapse seen when query-embedding causal LMs without pooling.
-        """
         import hashlib
         import numpy as np
         dimensions = 256
         vec = [0.0] * dimensions
         
-        # Tokenize words, removing punctuation
         words = re.findall(r'\w+', text.lower())
         if not words:
             return vec
             
         for w in words:
-            # Hash each word into an index and sign
             h = int(hashlib.md5(w.encode('utf-8')).hexdigest(), 16)
             idx = h % dimensions
             sign = 1 if ((h // dimensions) % 2 == 0) else -1
             vec[idx] += sign
             
-        # Normalize the vector
         vec_np = np.array(vec, dtype=float)
         norm = np.linalg.norm(vec_np)
         if norm > 0:
@@ -208,13 +135,20 @@ class OllamaClient:
         if weight_map is None:
             weight_map = {
                 "qwen2.5:0.5b": 1.0,
-                "qwen2.5:1.5b": 3.0
+                "qwen2.5:1.5b": 2.5
             }
-        weighted = 0.0
-        for mname, stats in self.model_stats.items():
-            weight = weight_map.get(mname, 1.0)
-            weighted += (stats["prompt_tokens"] + stats["completion_tokens"]) * weight
-        return weighted
+        
+        total = 0.0
+        for model, stats in self.model_stats.items():
+            weight = weight_map.get(model, 1.0)
+            tokens = stats["prompt_tokens"] + stats["completion_tokens"] * 1.5
+            total += tokens * weight
+        
+        # Add basic count for general client usage if stats are empty
+        if total == 0:
+            total = self.total_prompt_tokens + self.total_completion_tokens * 1.5
+            
+        return float(total)
 
     def reset_stats(self):
         self.total_prompt_tokens = 0

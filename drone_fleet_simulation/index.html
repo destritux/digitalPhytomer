@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Phytomer - Swarm Cognitive Dashboard</title>
+    <meta name="description" content="Dashboard interativo para monitoramento em tempo real do enxame de drones sob a arquitetura bioinspirada Digital Phytomer.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #080b11;
+            --card-bg: rgba(13, 18, 30, 0.7);
+            --card-border: rgba(255, 255, 255, 0.06);
+            --text-color: #f1f5f9;
+            --text-muted: #94a3b8;
+            
+            --neon-green: #10b981;
+            --neon-green-glow: rgba(16, 185, 129, 0.2);
+            --neon-red: #ef4444;
+            --neon-red-glow: rgba(239, 68, 68, 0.2);
+            --neon-blue: #0ea5e9;
+            --neon-blue-glow: rgba(14, 165, 233, 0.2);
+            --neon-yellow: #f59e0b;
+            --neon-yellow-glow: rgba(245, 158, 11, 0.2);
+            --neon-purple: #a855f7;
+            --neon-purple-glow: rgba(168, 85, 247, 0.2);
+            --neon-gray: #475569;
+        }
+
+        /* Customize Scrollbars dynamically adapting to theme */
+        :root {
+            --scrollbar-track: #0f172a;
+            --scrollbar-thumb: #334155;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+            scrollbar-width: thin;
+        }
+
+        @supports not (scrollbar-color: auto) {
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: var(--scrollbar-track);
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--scrollbar-thumb);
+                border-radius: 4px;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
+                radial-gradient(at 50% 0%, rgba(14, 165, 233, 0.04) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.03) 0px, transparent 50%);
+            color: var(--text-color);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.5;
+        }
+
+        header {
+            background: rgba(8, 11, 17, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--card-border);
+            padding: 1.25rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-title-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-title-container h1 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #10b981, #0ea5e9, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title-container span {
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.3);
+            color: var(--neon-blue);
+            padding: 0.15rem 0.5rem;
+            font-size: 0.7rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .sim-status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .sim-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--neon-gray);
+            box-shadow: 0 0 8px var(--neon-gray);
+        }
+
+        .sim-status-dot.active {
+            background-color: var(--neon-green);
+            box-shadow: 0 0 10px var(--neon-green);
+            animation: pulse 1.5s infinite;
+        }
+
+        main {
+            flex: 1;
+            padding: 1.5rem 2rem;
+            max-width: 1700px;
+            width: 100%;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .left-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+        }
+
+        .card-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.5rem;
+        }
+
+        .card-title-text {
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #e2e8f0;
+        }
+
+        .card-title-text::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: var(--neon-blue);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--neon-blue);
+        }
+
+        /* Config Form Elements */
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .input-group label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .input-value {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--neon-blue);
+            margin-left: 0.25rem;
+        }
+
+        .range-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.08);
+            outline: none;
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--neon-blue);
+            transition: transform 0.1s;
+        }
+
+        .range-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .select-input {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            padding: 0.4rem 0.75rem;
+            color: var(--text-color);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .select-input:focus {
+            border-color: var(--neon-blue);
+        }
+
+        /* Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: #fff;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.2s;
+        }
+
+        .toggle-checkbox {
+            display: none;
+        }
+
+        .toggle-checkbox:checked + .toggle-switch {
+            background-color: var(--neon-green);
+            box-shadow: 0 0 8px var(--neon-green-glow);
+        }
+
+        .toggle-checkbox:checked + .toggle-switch::after {
+            transform: translateX(16px);
+        }
+
+        /* Buttons styles */
+        .btn-row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--card-border);
+            color: var(--text-color);
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.8), rgba(168, 85, 247, 0.8));
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 1), rgba(168, 85, 247, 1));
+            box-shadow: 0 0 12px rgba(14, 165, 233, 0.3);
+        }
+
+        .btn-success {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: rgba(16, 185, 129, 0.4);
+            color: var(--neon-green);
+        }
+
+        .btn-success:hover {
+            background: rgba(16, 185, 129, 0.35);
+            box-shadow: 0 0 10px var(--neon-green-glow);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: var(--neon-red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.35);
+            box-shadow: 0 0 10px var(--neon-red-glow);
+        }
+
+        /* Drone Fleet Grid */
+        .fleet-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+
+        .drone-card {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 1rem;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 400px;
+            transition: all 0.3s;
+        }
+
+        .drone-card.crashed {
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .drone-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .drone-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+
+        .drone-badge {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .badge-active {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--neon-green);
+        }
+
+        .badge-crashed {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--neon-red);
+        }
+
+        /* Energy/Vascular flow indicator */
+        .energy-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .energy-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .energy-bar-bg {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .energy-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--neon-red) 0%, var(--neon-yellow) 50%, var(--neon-green) 100%);
+            border-radius: 3px;
+            transition: transform 0.4s cubic-bezier(0.1, 0.8, 0.3, 1);
+            transform-origin: left;
+        }
+
+        /* Visual SVG Schematic Container */
+        .schematic-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 15, 26, 0.6);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+            min-height: 200px;
+            position: relative;
+        }
+
+        .schematic-svg {
+            width: 100%;
+            height: 100%;
+            max-height: 240px;
+        }
+
+        .sensor-node {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sensor-node:hover circle {
+            stroke: #fff !important;
+            stroke-width: 1.5px;
+        }
+
+        .sensor-node:hover text {
+            fill: #fff !important;
+            font-weight: bold;
+        }
+
+        /* Sensor Detail Grid below schematic */
+        .sensor-tags-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(65px, 1fr));
+            gap: 0.35rem;
+        }
+
+        .sensor-mini-tag {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem;
+            padding: 0.25rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            text-align: center;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+        }
+
+        .sensor-mini-tag.active {
+            border-color: rgba(16, 185, 129, 0.2);
+            background: rgba(16, 185, 129, 0.03);
+            color: var(--neon-green);
+        }
+
+        .sensor-mini-tag.warning {
+            border-color: rgba(245, 158, 11, 0.2);
+            background: rgba(245, 158, 11, 0.03);
+            color: var(--neon-yellow);
+        }
+
+        .sensor-mini-tag.symbiosis {
+            border-color: rgba(14, 165, 233, 0.2);
+            background: rgba(14, 165, 233, 0.03);
+            color: var(--neon-blue);
+        }
+
+        .sensor-mini-tag.failed {
+            border-color: rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.03);
+            color: var(--neon-red);
+        }
+
+        .sensor-mini-tag.pruned {
+            border-color: rgba(168, 85, 247, 0.2);
+            background: rgba(168, 85, 247, 0.03);
+            color: var(--neon-purple);
+        }
+
+        /* Crashed Overlay Blur styling */
+        .crashed-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(239, 68, 68, 0.1);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s;
+        }
+
+        .drone-card.crashed .crashed-overlay {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .crashed-overlay h3 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--neon-red);
+            text-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+            letter-spacing: 2px;
+            animation: pulse 1s infinite;
+        }
+
+        .crashed-overlay p {
+            font-size: 0.75rem;
+            font-family: 'Share Tech Mono', monospace;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* SVG Glow Filters */
+        .svg-glow-green { filter: drop-shadow(0px 0px 4px var(--neon-green)); }
+        .svg-glow-red { filter: drop-shadow(0px 0px 4px var(--neon-red)); }
+        .svg-glow-blue { filter: drop-shadow(0px 0px 5px var(--neon-blue)); }
+        .svg-glow-yellow { filter: drop-shadow(0px 0px 4px var(--neon-yellow)); }
+        .svg-glow-purple { filter: drop-shadow(0px 0px 4px var(--neon-purple)); }
+
+        /* Animation keyframes */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Right Column - Charts, Terminal, botanical context */
+        .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Charts SVG Container */
+        .charts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .chart-box {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .chart-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .chart-current-val {
+            font-family: 'Share Tech Mono', monospace;
+            color: var(--neon-blue);
+        }
+
+        .chart-svg-wrapper {
+            background: rgba(10, 15, 26, 0.5);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            height: 90px;
+            width: 100%;
+        }
+
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Botanical Parallel Explanation styling */
+        .botanical-panel {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(14, 165, 233, 0.04));
+            border-color: rgba(16, 185, 129, 0.15);
+        }
+
+        .botanical-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .botanical-badge {
+            font-size: 0.65rem;
+            font-family: 'Share Tech Mono', monospace;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            border-width: 1px;
+            border-style: solid;
+        }
+
+        .botanical-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #10b981;
+        }
+
+        .botanical-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            text-align: justify;
+        }
+
+        /* Monospace Logs Terminal */
+        .terminal-panel {
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .terminal-log-flow {
+            flex: 1;
+            background: #05070a;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            padding: 0.75rem;
+            overflow-y: auto;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.72rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .term-line {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-start;
+            word-break: break-all;
+        }
+
+        .term-time {
+            color: #475569;
+            flex-shrink: 0;
+        }
+
+        .term-tag {
+            padding: 0 0.25rem;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .tag-sys { background: rgba(14, 165, 233, 0.15); color: var(--neon-blue); }
+        .tag-info { background: rgba(16, 185, 129, 0.15); color: var(--neon-green); }
+        .tag-warn { background: rgba(245, 158, 11, 0.15); color: var(--neon-yellow); }
+        .tag-fail { background: rgba(239, 68, 68, 0.15); color: var(--neon-red); }
+
+        .term-msg {
+            color: #cbd5e1;
+        }
+
+        /* Tab Navigation */
+        .tabs-container {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 2rem 0 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.5rem;
+            z-index: 10;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            transition: color 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-color);
+        }
+
+        .tab-btn.active {
+            color: var(--neon-blue);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -0.55rem;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--neon-blue);
+            box-shadow: 0 0 8px var(--neon-blue);
+        }
+
+        /* Charts Tab Layout */
+        .charts-tab-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(650px, 1fr));
+            gap: 1.5rem;
+            max-width: 1700px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5rem 2rem;
+        }
+
+        @media (max-width: 1400px) {
+            .charts-tab-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Heatmap Table */
+        .heatmap-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 1rem;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .heatmap-table th, .heatmap-table td {
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            text-align: center;
+            padding: 0.6rem 0.4rem;
+        }
+
+        .heatmap-table th {
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.01);
+            font-weight: 500;
+        }
+
+        .heatmap-cell {
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        /* Chart Selector Controls */
+        .chart-ctrl-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            gap: 1rem;
+        }
+
+        /* Hyperparameters Controls */
+        .hyperparams-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .hyperparam-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .hyperparam-card:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(14, 165, 233, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .hyperparam-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .hyperparam-header label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hyperparam-desc {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- HEADER -->
+    <header>
+        <div class="header-title-container">
+            <h1>DIGITAL PHYTOMER</h1>
+            <span>Swarm Cognitive Telemetry</span>
+        </div>
+        
+        <div class="header-controls">
+            <div class="sim-status-badge">
+                <div class="sim-status-dot" id="sim-status-dot"></div>
+                <span id="sim-status-text">DISCONNECTED</span>
+            </div>
+            
+            <span style="font-family:'Share Tech Mono', monospace; font-size:0.85rem; color:var(--text-muted);">
+                PASSO: <span id="header-step" style="color:var(--neon-blue);">0</span>
+            </span>
+        </div>
+    </header>
+
+    <!-- TAB NAVIGATION -->
+    <div class="tabs-container">
+        <button class="tab-btn active" id="btn-tab-main" onclick="switchTab('main')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+            Dashboard Principal
+        </button>
+        <button class="tab-btn" id="btn-tab-charts" onclick="switchTab('charts')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            Gráficos & Métricas
+        </button>
+    </div>
+
+    <!-- MAIN BODY -->
+    <div id="tab-content-main">
+        <main>
+        <!-- LEFT COLUMN: CONTROLS & FLEET GRID -->
+        <div class="left-col">
+            
+            <!-- Global Config & Controls -->
+            <section class="glass-card" aria-label="Painel de Controle">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Configurações de Simulação & Controle</h2>
+                </div>
+                
+                <div class="config-grid">
+                    <div class="input-group">
+                        <label for="slider-drones">Drones no Enxame: <span class="input-value" id="val-drones">3</span></label>
+                        <input type="range" id="slider-drones" class="range-slider" min="1" max="5" value="3">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="slider-sensors">Sensores por Drone: <span class="input-value" id="val-sensors">5</span></label>
+                        <input type="range" id="slider-sensors" class="range-slider" min="3" max="8" value="5">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="select-speed">Velocidade do Loop</label>
+                        <select id="select-speed" class="select-input">
+                            <option value="0.5">0.5x (Lento)</option>
+                            <option value="1.0" selected>1.0x (Padrão)</option>
+                            <option value="2.0">2.0x (Rápido)</option>
+                            <option value="4.0">4.0x (Ultra)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group" style="justify-content: center;">
+                        <label class="toggle-container" for="check-ollama">
+                            <input type="checkbox" id="check-ollama" class="toggle-checkbox">
+                            <div class="toggle-switch"></div>
+                            <span>Ollama LLM Mode</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card-header-bar" style="margin-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 1.25rem; margin-bottom: 0.75rem;">
+                    <h3 class="card-title-text" style="font-size: 0.9rem; letter-spacing: 0.5px;">Hiperparâmetros dos Agentes</h3>
+                </div>
+                
+                <div class="hyperparams-grid">
+                    <!-- Base Temp -->
+                    <div class="hyperparam-card">
+                        <div class="hyperparam-header">
+                            <label for="slider-temp">
+                                <span>Temperatura Base</span>
+                                <span class="input-value" id="val-temp">0.3</span>
+                            </label>
+                            <input type="range" id="slider-temp" class="range-slider" min="0.0" max="1.0" step="0.05" value="0.3">
+                        </div>
+                        <p class="hyperparam-desc">Controla a aleatoriedade e criatividade na tomada de decisão dos sensores. Valores baixos são lógicos e consistentes; valores altos são mais inventivos.</p>
+                    </div>
+                    
+                    <!-- Mutation Rate -->
+                    <div class="hyperparam-card">
+                        <div class="hyperparam-header">
+                            <label for="slider-mutation">
+                                <span>Taxa de Mutação</span>
+                                <span class="input-value" id="val-mutation">0.1</span>
+                            </label>
+                            <input type="range" id="slider-mutation" class="range-slider" min="0.0" max="0.5" step="0.01" value="0.1">
+                        </div>
+                        <p class="hyperparam-desc">Frequência com que os microagentes geram variações nos resolvedores cognitivos para descobrir novas rotas ou soluções.</p>
+                    </div>
+                    
+                    <!-- Vascular Decay -->
+                    <div class="hyperparam-card">
+                        <div class="hyperparam-header">
+                            <label for="slider-decay">
+                                <span>Decaimento Vascular</span>
+                                <span class="input-value" id="val-decay">15</span>
+                            </label>
+                            <input type="range" id="slider-decay" class="range-slider" min="5" max="30" step="1" value="15">
+                        </div>
+                        <p class="hyperparam-desc">Quantidade de energia (seiva vascular) que o sensor perde quando falha ao executar uma tarefa de navegação.</p>
+                    </div>
+                    
+                    <!-- Trust Mutation -->
+                    <div class="hyperparam-card">
+                        <div class="hyperparam-header">
+                            <label for="slider-trust">
+                                <span>Laço de Confiança</span>
+                                <span class="input-value" id="val-trust">0.03</span>
+                            </label>
+                            <input type="range" id="slider-trust" class="range-slider" min="0.00" max="0.10" step="0.005" value="0.03">
+                        </div>
+                        <p class="hyperparam-desc">Intensidade da variação na confiança sináptica que liga os sensores do drone após cooperações locais.</p>
+                    </div>
+                </div>
+                
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btn-save-config">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        Salvar Configs
+                    </button>
+                    <button class="btn btn-success" id="btn-start">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Iniciar Simulação
+                    </button>
+                    <button class="btn btn-danger" id="btn-stop">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                        Pausar
+                    </button>
+                </div>
+            </section>
+
+            <!-- Drone Swarm Grid -->
+            <section class="fleet-grid" id="fleet-grid">
+                <!-- Drone cards will be populated dynamically -->
+            </section>
+            
+        </div>
+
+        <!-- RIGHT COLUMN: METRICS, BOTANICAL COMPARISON, LOGS -->
+        <div class="right-col">
+            
+            <!-- SWARM METRICS -->
+            <section class="glass-card" aria-label="Métricas do Enxame">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Métricas de Saúde do Enxame</h2>
+                </div>
+                
+                <div class="charts-container">
+                    <!-- Accuracy Chart -->
+                    <div class="chart-box">
+                        <div class="chart-label-row">
+                            <span>Acurácia do Enxame</span>
+                            <span class="chart-current-val" id="val-curr-acc">0.0%</span>
+                        </div>
+                        <div class="chart-svg-wrapper">
+                            <svg class="chart-svg" id="svg-chart-acc">
+                                <defs>
+                                    <linearGradient id="grad-acc" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="var(--neon-green)" stop-opacity="0.15"/>
+                                        <stop offset="100%" stop-color="var(--neon-green)" stop-opacity="0"/>
+                                    </linearGradient>
+                                </defs>
+                                <path class="chart-area" fill="url(#grad-acc)" d=""/>
+                                <path class="chart-line" fill="none" stroke="var(--neon-green)" stroke-width="1.5" d=""/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- FDI Specialization Index -->
+                    <div class="chart-box">
+                        <div class="chart-label-row">
+                            <span>Especialização FDI</span>
+                            <span class="chart-current-val" id="val-curr-fdi">0.000</span>
+                        </div>
+                        <div class="chart-svg-wrapper">
+                            <svg class="chart-svg" id="svg-chart-fdi">
+                                <defs>
+                                    <linearGradient id="grad-fdi" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="var(--neon-yellow)" stop-opacity="0.15"/>
+                                        <stop offset="100%" stop-color="var(--neon-yellow)" stop-opacity="0"/>
+                                    </linearGradient>
+                                </defs>
+                                <path class="chart-area" fill="url(#grad-fdi)" d=""/>
+                                <path class="chart-line" fill="none" stroke="var(--neon-yellow)" stroke-width="1.5" d=""/>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Cumulative Allostatic Load -->
+                    <div class="chart-box">
+                        <div class="chart-label-row">
+                            <span>Carga Alostática Acumulada</span>
+                            <span class="chart-current-val" id="val-curr-allo">0 tk</span>
+                        </div>
+                        <div class="chart-svg-wrapper">
+                            <svg class="chart-svg" id="svg-chart-allo">
+                                <defs>
+                                    <linearGradient id="grad-allo" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="var(--neon-blue)" stop-opacity="0.15"/>
+                                        <stop offset="100%" stop-color="var(--neon-blue)" stop-opacity="0"/>
+                                    </linearGradient>
+                                </defs>
+                                <path class="chart-area" fill="url(#grad-allo)" d=""/>
+                                <path class="chart-line" fill="none" stroke="var(--neon-blue)" stroke-width="1.5" d=""/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BOTANICAL PARALLEL EXPLANATION -->
+            <section class="glass-card botanical-panel" aria-label="Contexto Botânico">
+                <div class="botanical-header">
+                    <h2 class="botanical-title">Paralelo Botânico</h2>
+                    <span class="botanical-badge" id="botanical-badge" style="color: var(--neon-green); border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">HOMEOSTASE</span>
+                </div>
+                <p class="botanical-desc" id="botanical-desc">
+                    Carregando dados de telemetria para mapear a resposta estressora botânica...
+                </p>
+            </section>
+
+            <!-- SWARM REALTIME LOG TERMINAL -->
+            <section class="glass-card terminal-panel" aria-label="Terminal de Telemetria">
+                <div class="card-header-bar" style="margin-bottom: 0.5rem;">
+                    <h2 class="card-title-text" style="font-size: 0.85rem;">Terminal de Log do Enxame</h2>
+                </div>
+                <div class="terminal-log-flow" id="terminal-flow">
+                    <div class="term-line">
+                        <span class="term-time">[00:00:00]</span>
+                        <span class="term-tag tag-sys">sys</span>
+                        <span class="term-msg">Inicie a simulação para sincronizar o terminal de eventos.</span>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+    </div>
+
+    <!-- TAB CONTENT: ADVANCED CHARTS -->
+    <div id="tab-content-charts" style="display: none;">
+        <main class="charts-tab-layout">
+            
+            <!-- 1. Timeline of Prunings & Crashes -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Linha do Tempo de Podas & Falhas</h2>
+                </div>
+                <div style="flex: 1; position: relative; margin-top: 0.75rem;">
+                    <svg id="svg-pruned-crashed" width="100%" height="100%" style="overflow: visible;"></svg>
+                </div>
+                <div style="display: flex; justify-content: center; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-purple); border-radius: 2px;"></div>
+                        <span>Sensores Podados</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-red); border-radius: 2px;"></div>
+                        <span>Drones Caídos</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Trust Heatmap -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="chart-ctrl-row">
+                    <h2 class="card-title-text">Mapa de Confiança Sináptica (Trust Scores)</h2>
+                    <select id="select-trust-drone" class="select-input" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                        <!-- Will be populated dynamically -->
+                    </select>
+                </div>
+                <div style="flex: 1; overflow-y: auto;" id="heatmap-container">
+                    <table class="heatmap-table" id="table-trust-heatmap"></table>
+                </div>
+            </section>
+
+            <!-- 3. Sensor success rate -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Taxa de Sucesso por Tipo de Sensor (Barras Empilhadas)</h2>
+                </div>
+                <div style="flex: 1; position: relative; margin-top: 0.75rem;">
+                    <svg id="svg-sensor-bar-rates" width="100%" height="100%" style="overflow: visible;"></svg>
+                </div>
+                <div style="display: flex; justify-content: center; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-green); border-radius: 2px;"></div>
+                        <span>Sucesso Local</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-red); border-radius: 2px;"></div>
+                        <span>Falha Primária</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Somatic Memory Evolution -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Evolução da Memória Somática (Tamanho vs Relevância)</h2>
+                </div>
+                <div style="flex: 1; position: relative; margin-top: 0.75rem;">
+                    <svg id="svg-memory-evolution" width="100%" height="100%" style="overflow: visible;"></svg>
+                </div>
+                <div style="display: flex; justify-content: center; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-blue); border-radius: 2px;"></div>
+                        <span>Tamanho da Memória (Eixo Esquerdo)</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <div style="width: 10px; height: 10px; background-color: var(--neon-green); border-radius: 2px;"></div>
+                        <span>Relevância Média (Eixo Direito)</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. Cost-Benefit Ratio -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Relação Custo-Benefício (Acurácia vs Carga Alostática)</h2>
+                </div>
+                <div style="flex: 1; position: relative; margin-top: 0.75rem;">
+                    <svg id="svg-cost-benefit" width="100%" height="100%" style="overflow: visible;"></svg>
+                </div>
+                <div style="display: flex; justify-content: center; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                    <span>Eixo X: Carga Alostática (Tokens) | Eixo Y: Acurácia Global</span>
+                </div>
+            </section>
+
+            <!-- 6. Delegation Tree / Circular Network -->
+            <section class="glass-card" style="height: 380px; display: flex; flex-direction: column;">
+                <div class="card-header-bar">
+                    <h2 class="card-title-text">Árvore de Delegação e Malha de Simbiose</h2>
+                </div>
+                <div style="flex: 1; position: relative; margin-top: 0.75rem;">
+                    <svg id="svg-delegation-network" width="100%" height="100%" style="overflow: visible;"></svg>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- CORE LOGIC: API BINDING & SVG RENDERING -->
+    <script>
+        // Global UI states
+        let config = {
+            num_drones: 3,
+            num_sensors: 5,
+            speed: 1.0,
+            use_ollama: false,
+            temperature: 0.3,
+            mutation_rate: 0.1,
+            decay_rate: 15,
+            trust_mutation: 0.03
+        };
+
+        let currentStatusData = null;
+        let hasInitializedConfig = false;
+        let activeTab = 'main';
+
+        // Sensor mapping list corresponding to simulator_server.py
+        const SENSOR_NAMES = ["CAM", "LDR", "THR", "SNR", "RAD", "GAS", "GYRO", "BARO"];
+        const SENSOR_FULL_NAMES = {
+            "CAM": "Câmera Óptica",
+            "LDR": "LiDAR 3D",
+            "THR": "Câmera Térmica",
+            "SNR": "Sonar de Distância",
+            "RAD": "Rádio Transmissor",
+            "GAS": "Sensor de Methane",
+            "GYRO": "Giroscópio/IMU",
+            "BARO": "Barômetro Altura"
+        };
+
+        // Botanical state texts based on telemetry analysis
+        const BOTANICAL_STATES = {
+            stable: {
+                badge: "HOMEOSTASE",
+                color: "var(--neon-green)",
+                bg: "rgba(16, 185, 129, 0.05)",
+                border: "rgba(16, 185, 129, 0.3)",
+                text: "Homeostase Foliar: Todos os estômatos foliares (sensores) operando perfeitamente. O fluxo vascular distribui eficientemente a energia. Os microagentes realizam a tomada de decisão com custo calórico mínimo."
+            },
+            pruning: {
+                badge: "ABSÇÃO/PODA",
+                color: "var(--neon-purple)",
+                bg: "rgba(168, 85, 247, 0.05)",
+                border: "rgba(168, 85, 247, 0.3)",
+                text: "Poda Fisiológica (Abscisão): Sensores locais esgotaram seus recursos vasculares (energia) e sofreram necrose definitiva do tecido. O TreeController cortou o fluxo energético para estas folhas inoperantes para salvar o tronco principal."
+            },
+            symbiosis: {
+                badge: "MICORRIZA",
+                color: "var(--neon-blue)",
+                bg: "rgba(14, 165, 233, 0.05)",
+                border: "rgba(14, 165, 233, 0.3)",
+                text: "Simbiose Mycorrhizal: O TreeController local detectou estresse crítico por falha de sensores. Ele ativou o rádio em modo de mesh e requisitou a redistribuição cooperativa de recursos cognitivos a drones vizinhos ativos. Isso emula a troca subterrânea de fósforo e nitrogênio via fungos."
+            },
+            stressed: {
+                badge: "TRANSPIRAÇÃO ESTRESSE",
+                color: "var(--neon-yellow)",
+                bg: "rgba(245, 158, 11, 0.05)",
+                border: "rgba(245, 158, 11, 0.3)",
+                text: "Estresse Vascular Coativo: O enxame sofreu degradação na acurácia global. Algumas sub-unidades falharam e os TreeControllers estão delegando tarefas a sensores redundantes, aumentando a transpiração e consumo de energia (carga alostática)."
+            },
+            crashed: {
+                badge: "COLAPSO DO BOSQUE",
+                color: "var(--neon-red)",
+                bg: "rgba(239, 68, 68, 0.05)",
+                border: "rgba(239, 68, 68, 0.3)",
+                text: "Necrose Vascular Severa: Falha sistêmica das defesas. Drones críticos perderam toda a energia foliar e sofreram queda fatal (morte biológica do espécime). O enxame está próximo do colapso ecológico total."
+            }
+        };
+
+        // Cache elements
+        const sliderDrones = document.getElementById("slider-drones");
+        const valDrones = document.getElementById("val-drones");
+        const sliderSensors = document.getElementById("slider-sensors");
+        const valSensors = document.getElementById("val-sensors");
+        const selectSpeed = document.getElementById("select-speed");
+        const checkOllama = document.getElementById("check-ollama");
+        
+        const sliderTemp = document.getElementById("slider-temp");
+        const valTemp = document.getElementById("val-temp");
+        const sliderMutation = document.getElementById("slider-mutation");
+        const valMutation = document.getElementById("val-mutation");
+        const sliderDecay = document.getElementById("slider-decay");
+        const valDecay = document.getElementById("val-decay");
+        const sliderTrust = document.getElementById("slider-trust");
+        const valTrust = document.getElementById("val-trust");
+
+        const btnSaveConfig = document.getElementById("btn-save-config");
+        const btnStart = document.getElementById("btn-start");
+        const btnStop = document.getElementById("btn-stop");
+
+        const headerStep = document.getElementById("header-step");
+        const simStatusDot = document.getElementById("sim-status-dot");
+        const simStatusText = document.getElementById("sim-status-text");
+
+        const fleetGrid = document.getElementById("fleet-grid");
+        const terminalFlow = document.getElementById("terminal-flow");
+
+        const botanicalBadge = document.getElementById("botanical-badge");
+        const botanicalDesc = document.getElementById("botanical-desc");
+
+        // Sync slider values to text
+        sliderDrones.addEventListener("input", (e) => { valDrones.innerText = e.target.value; });
+        sliderSensors.addEventListener("input", (e) => { valSensors.innerText = e.target.value; });
+        sliderTemp.addEventListener("input", (e) => { valTemp.innerText = parseFloat(e.target.value).toFixed(2); });
+        sliderMutation.addEventListener("input", (e) => { valMutation.innerText = parseFloat(e.target.value).toFixed(2); });
+        sliderDecay.addEventListener("input", (e) => { valDecay.innerText = parseInt(e.target.value); });
+        sliderTrust.addEventListener("input", (e) => { valTrust.innerText = parseFloat(e.target.value).toFixed(3); });
+
+        // Trust drone selector event listener
+        document.getElementById("select-trust-drone").addEventListener("change", () => {
+            if (activeTab === 'charts') {
+                drawTrustHeatmap();
+            }
+        });
+
+        // Auto-save configs when hyperparameters or speed are modified (on release/change)
+        sliderDrones.addEventListener("change", saveConfig);
+        sliderSensors.addEventListener("change", saveConfig);
+        selectSpeed.addEventListener("change", saveConfig);
+        checkOllama.addEventListener("change", saveConfig);
+        sliderTemp.addEventListener("change", saveConfig);
+        sliderMutation.addEventListener("change", saveConfig);
+        sliderDecay.addEventListener("change", saveConfig);
+        sliderTrust.addEventListener("change", saveConfig);
+
+        // API interaction handlers
+        async function fetchStatus() {
+            try {
+                const res = await fetch("/api/status");
+                if (res.ok) {
+                    const data = await res.json();
+                    updateUI(data);
+                }
+            } catch (err) {
+                console.error("Erro ao buscar status:", err);
+                simStatusDot.className = "sim-status-dot";
+                simStatusText.innerText = "OFFLINE";
+                simStatusText.style.color = "var(--text-muted)";
+            }
+        }
+
+        async function saveConfig() {
+            const num_drones = parseInt(sliderDrones.value);
+            const num_sensors = parseInt(sliderSensors.value);
+            const speed = parseFloat(selectSpeed.value);
+            const use_ollama = checkOllama.checked;
+            const temperature = parseFloat(sliderTemp.value);
+            const mutation_rate = parseFloat(sliderMutation.value);
+            const decay_rate = parseInt(sliderDecay.value);
+            const trust_mutation = parseFloat(sliderTrust.value);
+
+            try {
+                const res = await fetch("/api/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        num_drones, 
+                        num_sensors, 
+                        speed, 
+                        use_ollama,
+                        temperature,
+                        mutation_rate,
+                        decay_rate,
+                        trust_mutation
+                    })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    hasInitializedConfig = false; // Reset sync flag to pull confirmed config values
+                    fetchStatus();
+                }
+            } catch (err) {
+                console.error("Erro ao salvar config:", err);
+            }
+        }
+
+        async function startSim() {
+            try {
+                const res = await fetch("/api/start", { method: "POST" });
+                const result = await res.json();
+                if (result.success) {
+                    fetchStatus();
+                }
+            } catch (err) {
+                console.error("Erro ao iniciar simulação:", err);
+            }
+        }
+
+        async function stopSim() {
+            try {
+                const res = await fetch("/api/stop", { method: "POST" });
+                const result = await res.json();
+                if (result.success) {
+                    fetchStatus();
+                }
+            } catch (err) {
+                console.error("Erro ao pausar simulação:", err);
+            }
+        }
+
+        async function toggleSensor(droneId, sensorName) {
+            try {
+                const res = await fetch("/api/toggle_sensor", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ drone_id: droneId, sensor_name: sensorName })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    fetchStatus();
+                }
+            } catch (err) {
+                console.error("Erro ao alternar sensor:", err);
+            }
+        }
+
+        // Event listeners
+        btnSaveConfig.addEventListener("click", saveConfig);
+        btnStart.addEventListener("click", startSim);
+        btnStop.addEventListener("click", stopSim);
+
+        // Periodically poll backend status
+        setInterval(fetchStatus, 500);
+
+        // Core rendering of HTML and SVGs
+        let lastLogCount = 0;
+        
+        function updateUI(data) {
+            // Cache status data
+            currentStatusData = data;
+
+            // Update configs if changed and not initialized yet
+            if (data.config) {
+                config = data.config;
+                if (!hasInitializedConfig) {
+                    sliderDrones.value = config.num_drones;
+                    valDrones.innerText = config.num_drones;
+                    sliderSensors.value = config.num_sensors;
+                    valSensors.innerText = config.num_sensors;
+                    selectSpeed.value = config.speed.toFixed(1);
+                    checkOllama.checked = config.use_ollama;
+                    
+                    // Hyperparameters
+                    sliderTemp.value = config.temperature !== undefined ? config.temperature : 0.3;
+                    valTemp.innerText = parseFloat(sliderTemp.value).toFixed(2);
+                    
+                    sliderMutation.value = config.mutation_rate !== undefined ? config.mutation_rate : 0.1;
+                    valMutation.innerText = parseFloat(sliderMutation.value).toFixed(2);
+                    
+                    sliderDecay.value = config.decay_rate !== undefined ? config.decay_rate : 15;
+                    valDecay.innerText = parseInt(sliderDecay.value);
+                    
+                    sliderTrust.value = config.trust_mutation !== undefined ? config.trust_mutation : 0.03;
+                    valTrust.innerText = parseFloat(sliderTrust.value).toFixed(3);
+
+                    hasInitializedConfig = true;
+                }
+            }
+
+            // Sync trust selector drone options
+            const selectTrustDrone = document.getElementById("select-trust-drone");
+            if (selectTrustDrone && data.drones && selectTrustDrone.options.length !== data.drones.length) {
+                const currentVal = selectTrustDrone.value;
+                selectTrustDrone.innerHTML = "";
+                data.drones.forEach(d => {
+                    const opt = document.createElement("option");
+                    opt.value = d.drone_id;
+                    opt.innerText = d.name;
+                    selectTrustDrone.appendChild(opt);
+                });
+                if (currentVal && data.drones.some(d => d.drone_id == currentVal)) {
+                    selectTrustDrone.value = currentVal;
+                }
+            }
+
+            // Update Simulation status badge
+            if (data.is_running) {
+                simStatusDot.className = "sim-status-dot active";
+                simStatusText.innerText = "ATIVO (EMULAÇÃO)";
+                simStatusText.style.color = "var(--neon-green)";
+            } else {
+                simStatusDot.className = "sim-status-dot";
+                simStatusText.innerText = "PAUSADO / AGUARDANDO";
+                simStatusText.style.color = "var(--neon-yellow)";
+            }
+
+            headerStep.innerText = data.step;
+
+            // Render Drones Fleet
+            renderDronesGrid(data.drones, config.num_sensors);
+
+            // Update Charts
+            drawSVGChart("svg-chart-acc", data.history_acc, 0, 1.0, "var(--neon-green)", "val-curr-acc", (v) => `${(v * 100).toFixed(1)}%`);
+            drawSVGChart("svg-chart-fdi", data.history_fdi, 0, 0.5, "var(--neon-yellow)", "val-curr-fdi", (v) => v.toFixed(3));
+            drawSVGChart("svg-chart-allo", data.history_allostatic, 0, null, "var(--neon-blue)", "val-curr-allo", (v) => `${Math.round(v)} tk`);
+
+            // If we are on the charts tab, render the advanced charts
+            if (activeTab === 'charts') {
+                renderAdvancedCharts();
+            }
+
+            // Update Logs Terminal
+            if (data.logs && data.logs.length !== lastLogCount) {
+                renderLogs(data.logs);
+                lastLogCount = data.logs.length;
+            }
+
+            // Update Botanical parallel context
+            updateBotanicalState(data.drones, data.history_acc);
+        }
+
+        // Dynamic Drone Card & SVG Blueprint builder
+        function renderDronesGrid(drones, numSensors) {
+            if (!drones || drones.length === 0) {
+                fleetGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); font-size: 0.9rem; padding: 2rem;">Aguardando criação do enxame...</div>`;
+                return;
+            }
+
+            // Check if grid structure needs full redraw
+            const currentCards = fleetGrid.querySelectorAll(".drone-card");
+            if (currentCards.length !== drones.length) {
+                fleetGrid.innerHTML = "";
+                drones.forEach((drone) => {
+                    const card = document.createElement("div");
+                    card.className = `drone-card ${drone.status === 'crashed' ? 'crashed' : ''}`;
+                    card.id = `drone-card-${drone.drone_id}`;
+                    fleetGrid.appendChild(card);
+                });
+            }
+
+            // Update individual cards
+            drones.forEach((drone) => {
+                const card = document.getElementById(`drone-card-${drone.drone_id}`);
+                if (!card) return;
+
+                // Sync crashed class
+                if (drone.status === 'crashed') {
+                    if (!card.classList.contains("crashed")) card.classList.add("crashed");
+                } else {
+                    card.classList.remove("crashed");
+                }
+
+                // Inner content structure
+                card.innerHTML = `
+                    <div class="drone-card-header">
+                        <span class="drone-name">${drone.name} (Drone X5)</span>
+                        <span class="drone-badge ${drone.status === 'active' ? 'badge-active' : 'badge-crashed'}">
+                            ${drone.status === 'active' ? 'Operacional' : 'Queda'}
+                        </span>
+                    </div>
+                    
+                    <div class="energy-wrapper">
+                        <div class="energy-label-row">
+                            <span>Fluxo Vascular</span>
+                            <span>${Math.round(drone.health)}%</span>
+                        </div>
+                        <div class="energy-bar-bg">
+                            <div class="energy-bar-fill" style="transform: scaleX(${drone.health / 100});"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- SVG Schematic -->
+                    <div class="schematic-box" id="schematic-box-${drone.drone_id}">
+                        ${buildDroneSVG(drone, numSensors)}
+                    </div>
+                    
+                    <!-- Sensor details tag list -->
+                    <div class="sensor-tags-grid">
+                        ${Object.keys(drone.sensor_states).map(name => {
+                            const state = drone.sensor_states[name];
+                            const energy = Math.round(drone.sensor_energies[name] || 0);
+                            return `
+                                <div class="sensor-mini-tag ${state}">
+                                    <span>${name}</span>
+                                    <span>${energy}%</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- Crashed Overlay -->
+                    <div class="crashed-overlay">
+                        <h3>💥 DRO-X5 QUEDA</h3>
+                        <p>Dano Crítico / Recursos Esgotados</p>
+                    </div>
+                `;
+            });
+        }
+
+        // Renders standard interactive SVG schematic for Drone X5
+        function buildDroneSVG(drone, numSensors) {
+            const width = 300;
+            const height = 220;
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = 65;
+
+            let svgContent = `<svg class="schematic-svg" viewBox="0 0 ${width} ${height}">`;
+            
+            // Defs for glowing filters
+            svgContent += `
+                <defs>
+                    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="glow-red" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="glow-yellow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    <filter id="glow-purple" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                </defs>
+            `;
+
+            // Draw central Drone Body
+            const bodyColor = drone.status === 'crashed' ? "var(--neon-red)" : "#1e293b";
+            const bodyGlow = drone.status === 'crashed' ? "url(#glow-red)" : "none";
+            svgContent += `<circle cx="${cx}" cy="${cy}" r="22" fill="${bodyColor}" stroke="#475569" stroke-width="1.5" filter="${bodyGlow}"/>`;
+            
+            // Draw cross-arms structure of Quadcopter (simplified)
+            svgContent += `
+                <line x1="${cx - 40}" y1="${cy - 40}" x2="${cx + 40}" y2="${cy + 40}" stroke="#475569" stroke-width="2.5" />
+                <line x1="${cx - 40}" y1="${cy + 40}" x2="${cx + 40}" y2="${cy - 40}" stroke="#475569" stroke-width="2.5" />
+                <circle cx="${cx - 40}" cy="${cy - 40}" r="8" fill="none" stroke="#64748b" stroke-width="1" />
+                <circle cx="${cx + 40}" cy="${cy + 40}" r="8" fill="none" stroke="#64748b" stroke-width="1" />
+                <circle cx="${cx - 40}" cy="${cy + 40}" r="8" fill="none" stroke="#64748b" stroke-width="1" />
+                <circle cx="${cx + 40}" cy="${cy - 40}" r="8" fill="none" stroke="#64748b" stroke-width="1" />
+            `;
+
+            // Position active sensors radially
+            const activeSensors = Object.keys(drone.sensor_states);
+            const totalSensors = numSensors || activeSensors.length || 5;
+            activeSensors.forEach((name, i) => {
+                const angle = (i * 2 * Math.PI) / totalSensors - Math.PI / 2;
+                const x = cx + radius * Math.cos(angle);
+                const y = cy + radius * Math.sin(angle);
+
+                const state = drone.sensor_states[name];
+                
+                // Color configuration depending on sensor state
+                let color = "var(--neon-green)";
+                let glowFilter = "url(#glow-green)";
+                let pulseClass = "";
+
+                if (state === "failed") {
+                    color = "var(--neon-red)";
+                    glowFilter = "url(#glow-red)";
+                } else if (state === "warning") {
+                    color = "var(--neon-yellow)";
+                    glowFilter = "url(#glow-yellow)";
+                } else if (state === "symbiosis") {
+                    color = "var(--neon-blue)";
+                    glowFilter = "url(#glow-blue)";
+                } else if (state === "pruned") {
+                    color = "var(--neon-purple)";
+                    glowFilter = "url(#glow-purple)";
+                }
+
+                // If drone crashed, lock all to red failed
+                if (drone.status === 'crashed') {
+                    color = "var(--neon-red)";
+                    glowFilter = "none";
+                }
+
+                // Draw line to node
+                svgContent += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${color}" stroke-opacity="0.3" stroke-width="1.5" stroke-dasharray="2,2"/>`;
+
+                // Draw node circle (clickable)
+                svgContent += `
+                    <g class="sensor-node" onclick="toggleSensor(${drone.drone_id}, '${name}')">
+                        <circle cx="${x}" cy="${y}" r="11" fill="#0f172a" stroke="${color}" stroke-width="2" filter="${glowFilter}"/>
+                        <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-family="'Share Tech Mono', monospace" font-size="7.5" fill="#f1f5f9">${name}</text>
+                    </g>
+                `;
+            });
+
+            svgContent += `</svg>`;
+            return svgContent;
+        }
+
+        // Draw dynamic SVG line charts without D3/Chart.js
+        function drawSVGChart(svgId, dataPoints, minVal, maxVal, colorHex, textId, formatFn) {
+            const svg = document.getElementById(svgId);
+            if (!svg || !dataPoints || dataPoints.length === 0) return;
+
+            // Update current text indicator
+            const currentVal = dataPoints[dataPoints.length - 1];
+            document.getElementById(textId).innerText = formatFn(currentVal);
+
+            const width = svg.clientWidth || 300;
+            const height = svg.clientHeight || 90;
+            const padding = 6;
+
+            // Determine data scaling bound
+            const min = minVal !== null ? minVal : Math.min(...dataPoints);
+            let max = maxVal !== null ? maxVal : Math.max(...dataPoints);
+            if (max === min) max = min + 1.0; // avoid flat division by zero
+
+            const chartWidth = width - 2 * padding;
+            const chartHeight = height - 2 * padding;
+
+            // Render path points
+            let pathD = "";
+            let areaD = "";
+
+            const totalPoints = Math.max(10, dataPoints.length);
+            
+            dataPoints.forEach((val, index) => {
+                const x = padding + (index / (totalPoints - 1)) * chartWidth;
+                // invert y-axis for SVG top-down coordinate space
+                const normVal = (val - min) / (max - min);
+                const y = height - padding - normVal * chartHeight;
+
+                if (index === 0) {
+                    pathD = `M ${x} ${y}`;
+                    areaD = `M ${x} ${height - padding} L ${x} ${y}`;
+                } else {
+                    pathD += ` L ${x} ${y}`;
+                    areaD += ` L ${x} ${y}`;
+                }
+
+                if (index === dataPoints.length - 1) {
+                    areaD += ` L ${x} ${height - padding} Z`;
+                }
+            });
+
+            // Update DOM element lines
+            const pathElement = svg.querySelector(".chart-line");
+            const areaElement = svg.querySelector(".chart-area");
+
+            if (pathElement && pathD) pathElement.setAttribute("d", pathD);
+            if (areaElement && areaD) areaElement.setAttribute("d", areaD);
+        }
+
+        // Terminal Log renderer
+        function renderLogs(logs) {
+            terminalFlow.innerHTML = "";
+            logs.forEach(log => {
+                const div = document.createElement("div");
+                div.className = "term-line";
+                div.innerHTML = `
+                    <span class="term-time">${log.time}</span>
+                    <span class="term-tag tag-${log.tag}">${log.tag}</span>
+                    <span class="term-msg">${escapeHTML(log.log)}</span>
+                `;
+                terminalFlow.appendChild(div);
+            });
+            terminalFlow.scrollTop = terminalFlow.scrollHeight;
+        }
+
+        function escapeHTML(str) {
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Update the botanical parallel description based on swarm telemetry
+        function updateBotanicalState(drones, historyAcc) {
+            if (!drones || drones.length === 0) return;
+
+            const activeDrones = drones.filter(d => d.status === "active");
+            if (activeDrones.length === 0) {
+                applyBotanicalUI("crashed");
+                return;
+            }
+
+            // Check if any active drone has remote symbiosis active
+            let symbiosisFound = false;
+            let prunedFound = false;
+            let disabledFound = false;
+
+            activeDrones.forEach(d => {
+                Object.keys(d.sensor_states).forEach(name => {
+                    const state = d.sensor_states[name];
+                    if (state === "symbiosis") symbiosisFound = true;
+                    if (state === "pruned") prunedFound = true;
+                    if (state === "failed") disabledFound = true;
+                });
+            });
+
+            const currAcc = historyAcc.length > 0 ? historyAcc[historyAcc.length - 1] : 1.0;
+
+            if (symbiosisFound) {
+                applyBotanicalUI("symbiosis");
+            } else if (prunedFound) {
+                applyBotanicalUI("pruning");
+            } else if (currAcc < 0.8 || disabledFound) {
+                applyBotanicalUI("stressed");
+            } else {
+                applyBotanicalUI("stable");
+            }
+        }
+
+        function applyBotanicalUI(stateKey) {
+            const state = BOTANICAL_STATES[stateKey];
+            botanicalBadge.innerText = state.badge;
+            botanicalBadge.style.color = state.color;
+            botanicalBadge.style.borderColor = state.border;
+            botanicalBadge.style.background = state.bg;
+
+            botanicalDesc.innerText = state.text;
+            
+            const panel = document.querySelector(".botanical-panel");
+            panel.style.borderColor = state.border;
+        }
+
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            activeTab = tabId;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-content-main').style.display = 'none';
+            document.getElementById('tab-content-charts').style.display = 'none';
+
+            if (tabId === 'main') {
+                document.getElementById('btn-tab-main').classList.add('active');
+                document.getElementById('tab-content-main').style.display = 'block';
+            } else if (tabId === 'charts') {
+                document.getElementById('btn-tab-charts').classList.add('active');
+                document.getElementById('tab-content-charts').style.display = 'block';
+                // Trigger re-render of advanced charts
+                renderAdvancedCharts();
+            }
+        }
+
+        // Render All Advanced Charts
+        function renderAdvancedCharts() {
+            const data = currentStatusData;
+            if (!data) return;
+
+            // 1. Timeline of Prunings & Crashes
+            drawTimelineChart("svg-pruned-crashed", data.history_pruned, data.history_crashed);
+
+            // 2. Trust Heatmap
+            drawTrustHeatmap();
+
+            // 3. Sensor success rate (stacked bars)
+            drawSensorSuccessBars("svg-sensor-bar-rates", data.sensor_success, data.sensor_fail);
+
+            // 4. Somatic Memory Evolution (size vs relevance)
+            drawMemoryEvolutionChart("svg-memory-evolution", data.history_memory_size, data.history_memory_relevance);
+
+            // 5. Cost-Benefit Ratio
+            drawCostBenefitScatter("svg-cost-benefit", data.history_allostatic, data.history_acc);
+
+            // 6. Delegation Network Graph
+            drawDelegationNetwork("svg-delegation-network", data.drones, data.delegation_links);
+        }
+
+        // 1. Timeline of Prunings & Crashes
+        function drawTimelineChart(svgId, prunedArr, crashedArr) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            svg.innerHTML = "";
+
+            if (!prunedArr || prunedArr.length === 0) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono">Aguardando dados da simulação...</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth || 600;
+            const height = svg.clientHeight || 300;
+            const padX = 40;
+            const padY = 30;
+
+            const n = prunedArr.length;
+            const maxVal = Math.max(4, ...prunedArr, ...crashedArr) + 1;
+
+            // Draw grid and axis
+            let gridHtml = `<line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>`;
+            gridHtml += `<line x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>`;
+            
+            // Draw horizontal ticks/grid
+            const ticks = 4;
+            for (let i = 0; i <= ticks; i++) {
+                const val = Math.round((maxVal * i) / ticks);
+                const y = height - padY - (val / maxVal) * (height - 2 * padY);
+                gridHtml += `
+                    <line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="2,2"/>
+                    <text x="${padX - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-muted)" font-family="Share Tech Mono" font-size="9">${val}</text>
+                `;
+            }
+
+            // Draw line paths
+            let pathPruned = "";
+            let pathCrashed = "";
+
+            for (let i = 0; i < n; i++) {
+                const x = padX + (i / Math.max(1, n - 1)) * (width - 2 * padX);
+                
+                const yPruned = height - padY - (prunedArr[i] / maxVal) * (height - 2 * padY);
+                const yCrashed = height - padY - (crashedArr[i] / maxVal) * (height - 2 * padY);
+
+                if (i === 0) {
+                    pathPruned = `M ${x} ${yPruned}`;
+                    pathCrashed = `M ${x} ${yCrashed}`;
+                } else {
+                    pathPruned += ` L ${x} ${yPruned}`;
+                    pathCrashed += ` L ${x} ${yCrashed}`;
+                }
+            }
+
+            svg.innerHTML = `
+                ${gridHtml}
+                <path d="${pathPruned}" fill="none" stroke="var(--neon-purple)" stroke-width="2" filter="url(#glow-purple)"/>
+                <path d="${pathCrashed}" fill="none" stroke="var(--neon-red)" stroke-width="2" filter="url(#glow-red)"/>
+            `;
+        }
+
+        // 2. Trust Heatmap
+        function drawTrustHeatmap() {
+            const container = document.getElementById("heatmap-container");
+            const select = document.getElementById("select-trust-drone");
+            if (!container || !select) return;
+
+            const droneId = select.value;
+            const drone = currentStatusData.drones.find(d => d.drone_id == droneId);
+            if (!drone || !drone.trust_scores) {
+                container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.9rem; padding: 2rem; font-family: 'Share Tech Mono'">Sem dados de confiança para este drone.</div>`;
+                return;
+            }
+
+            const activeSensors = Object.keys(drone.sensor_states);
+            if (activeSensors.length === 0) {
+                container.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.9rem; padding: 2rem; font-family: 'Share Tech Mono'">Nenhum sensor disponível.</div>`;
+                return;
+            }
+
+            // Build HTML table matrix
+            let html = `<table class="heatmap-table">`;
+            
+            // Header row
+            html += `<tr><th>De \\ Para</th>`;
+            activeSensors.forEach(s => {
+                html += `<th>${s}</th>`;
+            });
+            html += `</tr>`;
+
+            // Data rows
+            activeSensors.forEach(src => {
+                html += `<tr><td style="font-weight: bold; color: var(--text-color);">${src}</td>`;
+                activeSensors.forEach(dst => {
+                    if (src === dst) {
+                        html += `<td style="background: rgba(255,255,255,0.05); color: var(--text-muted);">-</td>`;
+                    } else {
+                        const val = (drone.trust_scores[src] && drone.trust_scores[src][dst] !== undefined) 
+                                    ? drone.trust_scores[src][dst] 
+                                    : 0.5;
+                        
+                        // Color intensity based on trust value (neon-blue base)
+                        const bg = `rgba(14, 165, 233, ${val * 0.7 + 0.05})`;
+                        const textCol = val > 0.6 ? "#fff" : "var(--text-muted)";
+                        html += `
+                            <td class="heatmap-cell" style="background: ${bg}; color: ${textCol};">
+                                ${val.toFixed(2)}
+                            </td>
+                        `;
+                    }
+                });
+                html += `</tr>`;
+            });
+            html += `</table>`;
+            container.innerHTML = html;
+        }
+
+        // 3. Sensor success rate (stacked bars)
+        function drawSensorSuccessBars(svgId, successObj, failObj) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            svg.innerHTML = "";
+
+            const sensors = ["CAM", "LDR", "THR", "SNR", "RAD", "GAS", "GYRO", "BARO"];
+            const activeSensors = sensors.filter(s => (successObj[s] || 0) + (failObj[s] || 0) > 0);
+
+            if (activeSensors.length === 0) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono">Aguardando tarefas serem resolvidas...</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth || 600;
+            const height = svg.clientHeight || 300;
+            const barHeight = 20;
+            const spacing = 12;
+            const leftPad = 60;
+            const rightPad = 80;
+            const topPad = 20;
+
+            const chartWidth = width - leftPad - rightPad;
+
+            let html = "";
+            activeSensors.forEach((s, idx) => {
+                const succ = successObj[s] || 0;
+                const fail = failObj[s] || 0;
+                const total = succ + fail;
+                const succRate = succ / total;
+                const failRate = fail / total;
+
+                const y = topPad + idx * (barHeight + spacing);
+                const wSucc = succRate * chartWidth;
+                const wFail = failRate * chartWidth;
+
+                html += `
+                    <!-- Label -->
+                    <text x="${leftPad - 10}" y="${y + barHeight - 5}" text-anchor="end" fill="var(--text-color)" font-family="Share Tech Mono" font-size="11" font-weight="bold">${s}</text>
+                    
+                    <!-- Stacked bar -->
+                    <g>
+                        <!-- Success portion -->
+                        ${wSucc > 0 ? `<rect x="${leftPad}" y="${y}" width="${wSucc}" height="${barHeight}" fill="var(--neon-green)" opacity="0.8" rx="2" />` : ''}
+                        <!-- Failure portion -->
+                        ${wFail > 0 ? `<rect x="${leftPad + wSucc}" y="${y}" width="${wFail}" height="${barHeight}" fill="var(--neon-red)" opacity="0.8" rx="2" />` : ''}
+                    </g>
+                    
+                    <!-- Statistics Text -->
+                    <text x="${leftPad + chartWidth + 10}" y="${y + barHeight - 5}" fill="var(--text-muted)" font-family="Share Tech Mono" font-size="10">
+                        ${Math.round(succRate * 100)}% (${succ}/${total})
+                    </text>
+                `;
+            });
+
+            svg.innerHTML = html;
+        }
+
+        // 4. Somatic Memory Evolution (size vs relevance)
+        function drawMemoryEvolutionChart(svgId, sizeArr, relevanceArr) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            svg.innerHTML = "";
+
+            if (!sizeArr || sizeArr.length === 0) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono">Aguardando dados de aprendizado...</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth || 600;
+            const height = svg.clientHeight || 300;
+            const padX = 50;
+            const padY = 30;
+
+            const n = sizeArr.length;
+
+            // Draw Y1 axis (0 to 10 for size)
+            // Draw Y2 axis (0.0 to 1.0 for relevance)
+            let gridHtml = `<line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>`;
+            gridHtml += `<line x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>`;
+            gridHtml += `<line x1="${width - padX}" y1="${padY}" x2="${width - padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>`;
+
+            const ticks = 5;
+            for (let i = 0; i <= ticks; i++) {
+                const y = height - padY - (i / ticks) * (height - 2 * padY);
+                const sizeVal = Math.round((10 * i) / ticks);
+                const relVal = (i / ticks).toFixed(1);
+
+                gridHtml += `
+                    <line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="rgba(255,255,255,0.03)" stroke-dasharray="2,2"/>
+                    <!-- Left Y label (Size) -->
+                    <text x="${padX - 8}" y="${y + 4}" text-anchor="end" fill="var(--neon-blue)" font-family="Share Tech Mono" font-size="9">${sizeVal}</text>
+                    <!-- Right Y label (Relevance) -->
+                    <text x="${width - padX + 8}" y="${y + 4}" text-anchor="start" fill="var(--neon-green)" font-family="Share Tech Mono" font-size="9">${relVal}</text>
+                `;
+            }
+
+            let pathSize = "";
+            let pathRel = "";
+
+            for (let i = 0; i < n; i++) {
+                const x = padX + (i / Math.max(1, n - 1)) * (width - 2 * padX);
+                
+                // Scale size: 0 to 10
+                const ySize = height - padY - (sizeArr[i] / 10.0) * (height - 2 * padY);
+                // Scale relevance: 0.0 to 1.0
+                const yRel = height - padY - (relevanceArr[i] / 1.0) * (height - 2 * padY);
+
+                if (i === 0) {
+                    pathSize = `M ${x} ${ySize}`;
+                    pathRel = `M ${x} ${yRel}`;
+                } else {
+                    pathSize += ` L ${x} ${ySize}`;
+                    pathRel += ` L ${x} ${yRel}`;
+                }
+            }
+
+            svg.innerHTML = `
+                ${gridHtml}
+                <path d="${pathSize}" fill="none" stroke="var(--neon-blue)" stroke-width="2" filter="url(#glow-blue)"/>
+                <path d="${pathRel}" fill="none" stroke="var(--neon-green)" stroke-width="2" filter="url(#glow-green)"/>
+            `;
+        }
+
+        // 5. Cost-Benefit Ratio
+        function drawCostBenefitScatter(svgId, allocArr, accArr) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            svg.innerHTML = "";
+
+            if (!allocArr || allocArr.length === 0) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono">Aguardando dados de custo...</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth || 600;
+            const height = svg.clientHeight || 300;
+            const padX = 50;
+            const padY = 30;
+
+            const n = allocArr.length;
+            const maxAlloc = Math.max(100, ...allocArr) + 10;
+
+            // Draw axis
+            let gridHtml = `
+                <line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>
+                <line x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.15)"/>
+            `;
+
+            // Draw Y axis labels (Accuracy)
+            const ticksY = 5;
+            for (let i = 0; i <= ticksY; i++) {
+                const y = height - padY - (i / ticksY) * (height - 2 * padY);
+                const pct = Math.round((100 * i) / ticksY);
+                gridHtml += `
+                    <line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="rgba(255,255,255,0.03)" stroke-dasharray="2,2"/>
+                    <text x="${padX - 8}" y="${y + 4}" text-anchor="end" fill="var(--text-muted)" font-family="Share Tech Mono" font-size="9">${pct}%</text>
+                `;
+            }
+
+            // Draw X axis labels (Allostatic Load)
+            const ticksX = 5;
+            for (let i = 0; i <= ticksX; i++) {
+                const val = Math.round((maxAlloc * i) / ticksX);
+                const x = padX + (i / ticksX) * (width - 2 * padX);
+                gridHtml += `
+                    <text x="${x}" y="${height - padY + 14}" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono" font-size="9">${val}</text>
+                `;
+            }
+
+            // Trajectory and dots
+            let pathD = "";
+            let dotsHtml = "";
+
+            for (let i = 0; i < n; i++) {
+                const x = padX + (allocArr[i] / maxAlloc) * (width - 2 * padX);
+                const y = height - padY - (accArr[i] / 1.0) * (height - 2 * padY);
+
+                if (i === 0) {
+                    pathD = `M ${x} ${y}`;
+                } else {
+                    pathD += ` L ${x} ${y}`;
+                }
+
+                const isLast = (i === n - 1);
+                const radius = isLast ? 6 : 3.5;
+                const color = isLast ? "var(--neon-blue)" : "rgba(14, 165, 233, 0.4)";
+                const filter = isLast ? "url(#glow-blue)" : "none";
+
+                dotsHtml += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${color}" filter="${filter}"/>`;
+            }
+
+            svg.innerHTML = `
+                ${gridHtml}
+                ${n > 1 ? `<path d="${pathD}" fill="none" stroke="rgba(14, 165, 233, 0.15)" stroke-width="1.5"/>` : ''}
+                ${dotsHtml}
+            `;
+        }
+
+        // 6. Delegation Network Graph (Circular Topology)
+        function drawDelegationNetwork(svgId, drones, delegationLinks) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            svg.innerHTML = "";
+
+            if (!drones || drones.length === 0) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="var(--text-muted)" font-family="Share Tech Mono">Aguardando criação do enxame...</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth || 600;
+            const height = svg.clientHeight || 300;
+            const cx = width / 2;
+            const cy = height / 2;
+            const radius = Math.min(cx, cy) - 45;
+
+            // Generate list of all global sensor nodes
+            const nodes = [];
+            drones.forEach(d => {
+                const sensors = Object.keys(d.sensor_states);
+                sensors.forEach(s => {
+                    nodes.push({
+                        globalId: `${d.name}-${s}`,
+                        droneName: d.name,
+                        sensorName: s,
+                        status: d.sensor_states[s]
+                    });
+                });
+            });
+
+            if (nodes.length === 0) return;
+
+            const N = nodes.length;
+            const nodePositions = {};
+
+            // Calculate circle positions
+            nodes.forEach((node, idx) => {
+                const angle = (2 * Math.PI * idx) / N - Math.PI / 2;
+                const x = cx + radius * Math.cos(angle);
+                const y = cy + radius * Math.sin(angle);
+                nodePositions[node.globalId] = { x, y, node };
+            });
+
+            // Arrow marker definitions
+            let defsHtml = `
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="rgba(255,255,255,0.4)" />
+                    </marker>
+                    <marker id="arrow-symbiosis" viewBox="0 0 10 10" refX="22" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--neon-purple)" />
+                    </marker>
+                </defs>
+            `;
+
+            // Draw delegation curves
+            let linksHtml = "";
+            if (delegationLinks) {
+                Object.keys(delegationLinks).forEach(key => {
+                    const count = delegationLinks[key] || 0;
+                    if (count === 0) return;
+
+                    const parts = key.split("->");
+                    if (parts.length !== 2) return;
+
+                    const src = parts[0];
+                    const dst = parts[1];
+
+                    const posA = nodePositions[src];
+                    const posB = nodePositions[dst];
+
+                    if (posA && posB) {
+                        const isSymbiosis = posA.node.droneName !== posB.node.droneName;
+                        
+                        const midX = (posA.x + posB.x) / 2;
+                        const midY = (posA.y + posB.y) / 2;
+                        
+                        const dx = cx - midX;
+                        const dy = cy - midY;
+                        
+                        const ctrlX = midX + dx * 0.25;
+                        const ctrlY = midY + dy * 0.25;
+
+                        const strokeColor = isSymbiosis ? "var(--neon-purple)" : "rgba(14, 165, 233, 0.4)";
+                        const marker = isSymbiosis ? "url(#arrow-symbiosis)" : "url(#arrow)";
+                        const strokeWidth = Math.min(5, 1 + count * 0.4);
+
+                        linksHtml += `
+                            <path d="M ${posA.x} ${posA.y} Q ${ctrlX} ${ctrlY} ${posB.x} ${posB.y}" 
+                                  fill="none" 
+                                  stroke="${strokeColor}" 
+                                  stroke-width="${strokeWidth}" 
+                                  marker-end="${marker}"
+                                  stroke-opacity="0.8" />
+                        `;
+                    }
+                });
+            }
+
+            // Draw nodes
+            let nodesHtml = "";
+            nodes.forEach(node => {
+                const pos = nodePositions[node.globalId];
+                
+                let color = "var(--neon-green)";
+                if (node.status === "failed") color = "var(--neon-red)";
+                else if (node.status === "warning") color = "var(--neon-yellow)";
+                else if (node.status === "symbiosis") color = "var(--neon-blue)";
+                else if (node.status === "pruned") color = "var(--neon-purple)";
+
+                const dNameAbbr = node.droneName.replace("Drone-", "D");
+                const label = `${dNameAbbr}-${node.sensorName}`;
+
+                const angle = Math.atan2(pos.y - cy, pos.x - cx);
+                const labelX = pos.x + 16 * Math.cos(angle);
+                const labelY = pos.y + 4 + 12 * Math.sin(angle);
+                const textAnchor = Math.cos(angle) > 0.1 ? "start" : (Math.cos(angle) < -0.1 ? "end" : "middle");
+
+                nodesHtml += `
+                    <g>
+                        <circle cx="${pos.x}" cy="${pos.y}" r="6.5" fill="#0f172a" stroke="${color}" stroke-width="2.5" />
+                        <text x="${labelX}" y="${labelY}" text-anchor="${textAnchor}" fill="var(--text-color)" font-family="Share Tech Mono" font-size="8.5" font-weight="bold">${label}</text>
+                    </g>
+                `;
+            });
+
+            svg.innerHTML = defsHtml + linksHtml + nodesHtml;
+        }
+    </script>
+</body>
+</html>
