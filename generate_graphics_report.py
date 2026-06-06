@@ -496,9 +496,10 @@ def build_graphics_report():
     
     for row in mvp_data:
         dom = row.get("Domain", "Math")
-        if row.get("GroupA_Success") == 1.0: acc_a[dom] += 1
-        if row.get("GroupB_Success") == 1.0: acc_b[dom] += 1
-        if row.get("GroupC_Success") == 1.0: acc_c[dom] += 1
+        if dom in acc_a:
+            if row.get("GroupA_Success") == 1.0: acc_a[dom] += 1
+            if row.get("GroupB_Success") == 1.0: acc_b[dom] += 1
+            if row.get("GroupC_Success") == 1.0: acc_c[dom] += 1
         
     table1 = doc.add_table(rows=6, cols=4)
     style_table(table1)

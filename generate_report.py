@@ -825,9 +825,10 @@ def build_docx_report():
 
     for row in mvp_data:
         dom = row.get("Domain", "Math")
-        if row.get("GroupA_Success") == 1.0: acc_a_mvp[dom] += 1
-        if row.get("GroupB_Success") == 1.0: acc_b_mvp[dom] += 1
-        if row.get("GroupC_Success") == 1.0: acc_c_mvp[dom] += 1
+        if dom in acc_a_mvp:
+            if row.get("GroupA_Success") == 1.0: acc_a_mvp[dom] += 1
+            if row.get("GroupB_Success") == 1.0: acc_b_mvp[dom] += 1
+            if row.get("GroupC_Success") == 1.0: acc_c_mvp[dom] += 1
 
     # Table 6
     table6 = doc.add_table(rows=6, cols=4)

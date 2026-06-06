@@ -2161,7 +2161,8 @@ def main():
             elif t < 20: dom = "Cyber"
             elif t < 30: dom = "Drone"
             elif t < 40: dom = "BlackBox"
-            elif t < 70: dom = "Math_GSM8K"
+            elif t < 50: dom = "Math_OOD"
+            elif t < 80: dom = "Math_GSM8K"
             else: dom = "BlackBox_ARC"
             writer.writerow([
                 dom,
