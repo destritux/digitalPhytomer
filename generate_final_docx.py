@@ -502,13 +502,13 @@ def build_docx_report():
         "A Tabela 1 apresenta a acurácia de tarefas e o Índice de Diferenciação Funcional (FDI) consolidados por época para o "
         "enxame completo (Grupo C), o enxame com reset de memória inter-época (Grupo C com Reset) e a configuração ablacionada sem "
         "memória somática e confiança relacional (Grupo C-Ablated). "
-        "Os dados revelam que o Grupo C iniciou a simulação com acurácia de 32,5% na época 1, subindo para 35,3% na época 2 e "
-        "apresentando posterior declínio nas épocas 3 (32,7%), 4 (29,9%) e 5 (22,6%). O Grupo C com Reset apresentou decréscimo "
-        "contínuo, registrando acurácia de 32,5% na época 1 e finalizando com 16,2% na época 5. "
-        "No Grupo C-Ablated, a acurácia média foi de 34,9% na época 1 e 36,8% na época 2, caindo acentuadamente para 26,3% na época 3, "
-        "8,9% na época 4 e atingindo 2,8% na época 5. "
-        "Em relação ao FDI, o Grupo C manteve valores médios de 0,6819 na época 1, 0,4714 na época 2, 0,3990 na época 3, "
-        "0,3588 na época 4 e 0,3396 na época 5. O Grupo C com Reset obteve FDI de 0,6819 na época 1, reduzindo-se para 0,2329 "
+        "Os dados revelam que o Grupo C iniciou a simulação com acurácia de 33,5% na época 1, subindo para 35,3% na época 2 e "
+        "apresentando posterior declínio nas épocas 3 (34,4%), 4 (33,3%) e 5 (30,6%). O Grupo C com Reset apresentou decréscimo "
+        "inicial de 33,5% na época 1 para 33,2% na época 2, mantendo 34,5% na época 3, 33,6% na época 4 e finalizando com 31,4% na época 5. "
+        "No Grupo C-Ablated, a acurácia média foi de 35,0% na época 1 e 36,8% na época 2, caindo acentuadamente para 26,3% na época 3, "
+        "9,0% na época 4 e atingindo 2,8% na época 5. "
+        "Em relação ao FDI, o Grupo C manteve valores médios de 0,6933 na época 1, 0,4561 na época 2, 0,3624 na época 3, "
+        "0,3207 na época 4 e 0,3059 na época 5. O Grupo C com Reset obteve FDI de 0,6933 na época 1, e alcançou 0,6479 "
         "na época 5. A configuração ablacionada (Grupo C-Ablated) registrou valores inferiores de FDI ao longo de todas as épocas, "
         "partindo de 0,2051 na época 1 e estabilizando em 0,0560 na época 5.",
         
@@ -538,11 +538,11 @@ def build_docx_report():
 
     # Data from loaded CSVs
     data_epochs = [
-        ("1", "32.5%", "32.5%", "35.0%", "0.682", "0.682", "0.205"),
-        ("2", "35.3%", "31.8%", "36.8%", "0.471", "0.671", "0.083"),
-        ("3", "32.7%", "28.5%", "26.3%", "0.399", "0.582", "0.061"),
-        ("4", "30.0%", "22.3%", "9.0%", "0.359", "0.363", "0.056"),
-        ("5", "22.6%", "16.2%", "2.8%", "0.340", "0.233", "0.056")
+        ("1", "33.5%", "33.5%", "35.0%", "0.693", "0.693", "0.205"),
+        ("2", "35.3%", "33.2%", "36.8%", "0.456", "0.643", "0.083"),
+        ("3", "34.4%", "34.5%", "26.3%", "0.362", "0.752", "0.061"),
+        ("4", "33.3%", "33.6%", "9.0%", "0.321", "0.625", "0.056"),
+        ("5", "30.6%", "31.4%", "2.8%", "0.306", "0.648", "0.056")
     ]
     for row_idx, row_vals in enumerate(data_epochs):
         for col_idx, val in enumerate(row_vals):
@@ -587,7 +587,7 @@ def build_docx_report():
         "(p-value ajustado = 1,000), Orquestrada (p-value ajustado = 1,000), Aleatória (p-value ajustado = 1,000), "
         "de Papel Fixo (p-value ajustado = 1,000) e Planejador Central (p-value ajustado = 1,000). "
         "Entretanto, a comparação entre o Grupo C e o Grupo C-Ablated indicou diferença estatisticamente significativa "
-        "para acurácia (U = 789,0, p-value ajustado < 0,001). "
+        "para acurácia (U = 864,0, p-value ajustado < 0,001). "
         "No que tange ao FDI, o Grupo C registrou diferença estatisticamente significativa em relação ao Grupo C-Ablated "
         "(U = 900,0, p-value ajustado < 0,001), ao Grupo Aleatório (U = 900,0, p-value ajustado < 0,001) e ao Planejador "
         "Central (U = 900,0, p-value ajustado < 0,001)."
@@ -606,12 +606,12 @@ def build_docx_report():
         cell.paragraphs[0].runs[0].font.size = Pt(9.5)
 
     stat_data = [
-        ("Grupo C vs Monolítico (Acurácia)", "0.0", "1.000", "1.000", "Não"),
+        ("Grupo C vs Monolítico (Acurácia)", "0.5", "1.000", "1.000", "Não"),
         ("Grupo C vs Orquestrado (Acurácia)", "0.0", "1.000", "1.000", "Não"),
-        ("Grupo C vs Aleatório (Acurácia)", "9.5", "1.000", "1.000", "Não"),
-        ("Grupo C vs Papel Fixo (Acurácia)", "6.5", "1.000", "1.000", "Não"),
-        ("Grupo C vs Planejador Central (Acurácia)", "8.5", "1.000", "1.000", "Não"),
-        ("Grupo C vs Ablacionado (Acurácia)", "789.0", "0.000", "0.000", "Sim"),
+        ("Grupo C vs Aleatório (Acurácia)", "21.0", "1.000", "1.000", "Não"),
+        ("Grupo C vs Papel Fixo (Acurácia)", "22.0", "1.000", "1.000", "Não"),
+        ("Grupo C vs Planejador Central (Acurácia)", "16.5", "1.000", "1.000", "Não"),
+        ("Grupo C vs Ablacionado (Acurácia)", "864.0", "0.000", "0.000", "Sim"),
         ("Grupo C vs Ablacionado (FDI)", "900.0", "0.000", "0.000", "Sim"),
         ("Grupo C vs Aleatório (FDI)", "900.0", "0.000", "0.000", "Sim"),
         ("Grupo C vs Planejador Central (FDI)", "900.0", "0.000", "0.000", "Sim")
@@ -677,8 +677,10 @@ def build_docx_report():
         "Na Fase Cyber (10 tarefas), os Grupos A e C atingiram 100,0% de acurácia, ao passo que o Grupo B registrou 90,0%. "
         "Na Fase Drone (10 tarefas), o Grupo C obteve acurácia de 80,0%, enquanto o Grupo A e o Grupo B registraram, "
         "respectivamente, 70,0% e 40,0%. Na Fase BlackBox (10 tarefas), as taxas de acurácia foram de 30,0% para o Grupo A, "
-        "20,0% para o Grupo B e 10,0% para o Grupo C. Na Fase Math OOD Return (10 tarefas), a acurácia foi de 30,0% "
-         "para o Grupo A, 40,0% para o Grupo B e 13,3% para o Grupo C.\n"
+        "20,0% para o Grupo B e 10,0% para o Grupo C. Na Fase Math OOD (10 tarefas), a acurácia foi de 60,0% "
+        "para o Grupo A, 20,0% para o Grupo B e 20,0% para o Grupo C. Na Fase Math GSM8K (30 tarefas), a acurácia foi de 13,3% "
+        "para o Grupo A, 46,7% para o Grupo B e 13,3% para o Grupo C. Na Fase BlackBox ARC (20 tarefas), a acurácia foi de 65,0% "
+        "para o Grupo A, 70,0% para o Grupo B e 0,0% para o Grupo C.\n"
         "A Figura 3 detalha a trajetória do enxame no Diagrama de Fase de Emergência, demonstrando que a entropia de coordenação "
         "decresce à medida que o sistema converge para um estado auto-organizado. "
         "A Figura 4 compara o comportamento do sistema sob diferentes regimes de incerteza ambiental (Estável, Semi-Estável e Caótico). "
@@ -688,7 +690,7 @@ def build_docx_report():
     )
 
     # Table 3: Baseline Compliance Tasks Performance
-    table3 = doc.add_table(rows=6, cols=4)
+    table3 = doc.add_table(rows=8, cols=4)
     style_table(table3)
     headers3 = ["Fase / Domínio", "Grupo A (Monolítico)", "Grupo B (Orquestrado)", "Grupo C (Emergente)"]
     for idx, text in enumerate(headers3):
@@ -704,7 +706,9 @@ def build_docx_report():
         ("Fase Cyber (10 Tasks)", "100.0%", "90.0%", "100.0%"),
         ("Fase Drone (10 Tasks)", "70.0%", "40.0%", "80.0%"),
         ("Fase BlackBox (10 Tasks)", "30.0%", "20.0%", "10.0%"),
-        ("Fase Math OOD Return (10 Tasks)", "30.0%", "40.0%", "13.3%")
+        ("Fase Math OOD (10 Tasks)", "60.0%", "20.0%", "20.0%"),
+        ("Fase Math GSM8K (30 Tasks)", "13.3%", "46.7%", "13.3%"),
+        ("Fase BlackBox ARC (20 Tasks)", "65.0%", "70.0%", "0.0%")
     ]
     for row_idx, row_vals in enumerate(compliance_data):
         for col_idx, val in enumerate(row_vals):
@@ -776,7 +780,7 @@ def build_docx_report():
         "baseadas no modelo holobionte, em memória somática local e em relações de confiança bilateral, induziria a emergência de "
         "diferenciação funcional e resiliência topológica sem papéis explicitamente programados. "
         "Os dados de FDI (Tabela 1) confirmam o estabelecimento de diferenciação funcional persistente: no Grupo C, o FDI médio "
-        "manteve-se em 0,3396 na época 5, em contraste com a trajetória do Grupo C-Ablated, no qual o FDI caiu para 0,0560. "
+        "manteve-se em 0,3059 na época 5, em contraste com a trajetória do Grupo C-Ablated, no qual o FDI caiu para 0,0560. "
         "A diferença estatística de FDI entre o Grupo C e o Grupo C-Ablated foi estatisticamente significativa (p < 0,001, Tabela 2), "
         "o que corrobora a premissa de que os mecanismos de memória e confiança relacional atuam como fatores causais de especialização "
         "funcional descentralizada, alinhando-se com a literatura clássica de auto-organização em sistemas biológicos (Camazine et al., 2001).",
