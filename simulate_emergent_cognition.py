@@ -1742,9 +1742,9 @@ def save_multi_epoch_results(res_c, res_c_reset, res_abl):
         for i in range(5):
             writer.writerow([
                 i+1,
-                res_c["epoch_accuracies"][i],
-                res_c_reset["epoch_accuracies"][i],
-                res_abl["epoch_accuracies"][i]
+                res_c["accuracies_mean"][i],
+                res_c_reset["accuracies_mean"][i],
+                res_abl["accuracies_mean"][i]
             ])
     
     # Save FDI evolution
@@ -1754,9 +1754,9 @@ def save_multi_epoch_results(res_c, res_c_reset, res_abl):
         for i in range(5):
             writer.writerow([
                 i+1,
-                res_c["epoch_fdi_final"][i],
-                res_c_reset["epoch_fdi_final"][i],
-                res_abl["epoch_fdi_final"][i]
+                res_c["fdi_mean"][i],
+                res_c_reset["fdi_mean"][i],
+                res_abl["fdi_mean"][i]
             ])
     
     # Save learning curves (per epoch, per step)
@@ -1768,9 +1768,9 @@ def save_multi_epoch_results(res_c, res_c_reset, res_abl):
                 writer.writerow([
                     epoch+1,
                     step,
-                    res_c["epoch_learning_curves"][epoch][step],
-                    res_c_reset["epoch_learning_curves"][epoch][step],
-                    res_abl["epoch_learning_curves"][epoch][step]
+                    res_c["learning_curves_mean"][epoch][step],
+                    res_c_reset["learning_curves_mean"][epoch][step],
+                    res_abl["learning_curves_mean"][epoch][step]
                 ])
     
     print("[Save] Multi-epoch results saved to results/")
