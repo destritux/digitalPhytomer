@@ -92,8 +92,8 @@ class LSystemRegenerator:
         else:
             for tok in tokens:
                 if tok == "A":
-                    # Rule 1: A rewrites to W(10) M
-                    new_tokens.append("W(10) M")
+                    # Rule 1: A rewrites to W(5) M
+                    new_tokens.append("W(5) M")
                 elif tok == "M":
                     # Rule 3: M rewrites to T C(3)
                     new_tokens.append("T C(3)")

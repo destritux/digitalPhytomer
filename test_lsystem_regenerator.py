@@ -15,27 +15,27 @@ class TestLSystemRegenerator(unittest.TestCase):
         self.assertEqual(r.original_neighbors, ["Cell-002", "Cell-003", "Cell-004"])
 
     def test_rule_1_rewriting(self):
-        # Rule 1: A rewrites to W(10) M
+        # Rule 1: A rewrites to W(5) M
         r = LSystemRegenerator("Cell-001", ["Cell-002", "Cell-003", "Cell-004"])
         res = r.step({}, [])
-        self.assertEqual(r.string, "W(10) M")
+        self.assertEqual(r.string, "W(5) M")
         self.assertIsNone(res)
 
     def test_rule_2_and_3_wait_and_activation(self):
         # Rule 2 & 3: W(n) -> W(n-1) M. When n reaches 0, rewrites to process M, which rewrites to T C(3).
         r = LSystemRegenerator("Cell-001", ["Cell-002", "Cell-003", "Cell-004"])
         
-        # Step 1: A -> W(10) M
+        # Step 1: A -> W(5) M
         r.step({}, [])
-        self.assertEqual(r.string, "W(10) M")
+        self.assertEqual(r.string, "W(5) M")
         
-        # Step 2 to 10: W(10) M -> ... -> W(2) M
-        for i in range(9):
+        # Step 2 to 5: W(5) M -> ... -> W(2) M
+        for i in range(4):
             r.step({}, [])
             
         self.assertEqual(r.string, "W(1) M")
         
-        # Step 11: W(1) M -> M (which activates and rewrites to T C(3))
+        # Step 6: W(1) M -> M (which activates and rewrites to T C(3))
         r.step({}, [])
         self.assertEqual(r.string, "T C(3)")
 

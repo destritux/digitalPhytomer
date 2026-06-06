@@ -1,4 +1,5 @@
 results/
+results_old/
 scratch/
 .venv/
 __pycache__/

@@ -42,16 +42,10 @@ def main():
         "Running Emergent Cognition Simulation (simulate_emergent_cognition.py)"
     )
     
-    # 3. Run Academic Report Generator
+    # 3. Run Final Document Report Generator
     run_command(
-        [python_bin, "generate_report.py"],
-        "Generating Academic Report (generate_report.py)"
-    )
-    
-    # 4. Run Graphics Report Generator
-    run_command(
-        [python_bin, "generate_graphics_report.py"],
-        "Generating Graphics Report (generate_graphics_report.py)"
+        [python_bin, "generate_final_docx.py"],
+        "Generating Final Word Document Report (generate_final_docx.py)"
     )
     
     print("=" * 80)

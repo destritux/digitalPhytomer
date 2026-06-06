@@ -250,7 +250,7 @@ def build_docx_report():
         "seus fluxos de recursos energeticamente cortados. A ocorrência desta exaustão ativa a morte lógica imediata do nó, que "
         "é ativamente podado e excluído dos ciclos de leilão subsequentes para cessar o vazamento termodinâmico e evitar a "
         "propagação do erro a nós simbióticos saudáveis. Este mecanismo é acoplado de forma indissociável a uma fila de "
-        "regeneração adaptativa: decorrido um atraso fisiológico de 10 passos operacionais, uma nova unidade estrutural "
+        "regeneração adaptativa: decorrido um atraso fisiológico de 5 passos operacionais, uma nova unidade estrutural "
         "indiferenciada com memória limpa e níveis basais de recursos é instanciada na malha, garantindo a recuperação funcional "
         "do sistema.",
         
@@ -358,7 +358,7 @@ def build_docx_report():
          "100 recursos, com capacidade máxima de 150. A termodinâmica do sistema aplica uma recompensa de +10 unidades "
          "energéticas por sucesso e penalidades de -5 para o agente primário e -2 para o agente auxiliar sob falha. O limiar "
          "de abscisão (morte lógica) é ativado quando os recursos atingem valores nulos ou negativos, o que desencadeia um atraso "
-         "de regeneração estrito de 10 passos operacionais até que um novo microagente indiferenciado seja inserido na rede para "
+         "de regeneração estrito de 5 passos operacionais até que um novo microagente indiferenciado seja inserido na rede para "
          "recuperar o enxame lesionado. A rede de confiança relacional Peer-to-Peer inicia com um valor neutro de 0,5 e restringe "
          "a comunicação à vizinhança dos 3 parceiros mais confiados por agente. O ajuste por sucesso de delegação computa um "
          "incremento de +0,03 na relação do nó primário para o ajudante, com reciprocidade de +0,01, enquanto falhas de delegação "
@@ -383,7 +383,7 @@ def build_docx_report():
          "completa sofrem abscisão. A ocorrência da morte lógica ativa a exclusão imediata do nó dos ciclos de leilão subsequentes. "
          "O identificador do agente e o seu contexto relacional (os 3 últimos parceiros confiados) são transferidos como um "
          "axioma (símbolo A) para o motor de gramática gerativa do sistema, o L-System Regenerator. O processamento da string "
-         "garante o atraso sistemático de 10 passos operacionais através da regra W(10). Esgotado este temporizador, a regra de "
+         "garante o atraso sistemático de 5 passos operacionais através da regra W(5). Esgotado este temporizador, a regra de "
          "ramificação T C(3) é ativada. A nova unidade indiferenciada é instanciada com memória limpa e orçamento restaurado "
          "em 100 recursos, porém, em vez de níveis basais globais, as suas novas arestas de confiança são injetadas direcionalmente "
          "pelo L-System (reconexão local ou realocação distal), promovendo plasticidade topológica. O rigor estatístico do ensaio "
@@ -425,7 +425,7 @@ def build_docx_report():
         ("2.4. Orquestração Holárquica: O Processo de Leilão Metabólico e Delegação P2P",
          "O núcleo da coordenação descentralizada reside na função run_swarm. A cada tarefa, o sistema filtra os agentes não "
          "depletados. Agentes depletados sofrem abscisão imediata e são movidos para a classe LSystemRegenerator. O L-System "
-         "sofre derivação: A -> W(10) M -> T C(3). O operador T avalia a média local dos 3 vizinhos originais versus a média global. "
+         "sofre derivação: A -> W(5) M -> T C(3). O operador T avalia a média local dos 3 vizinhos originais versus a média global. "
          "Se a média local for superior, C(3) reconecta aos vizinhos originais; caso contrário, conecta aos 3 nós com mais recursos "
          "atuais. Para os agentes ativos, identifica-se a vizinhança de 3 parceiros mais confiados e calcula-se os lances de leilão "
          "(bid). O lance pondera competência semântica e uma taxa de monopólio acumulada (penalidade de 0.03 por tarefa resolvida, "
@@ -445,8 +445,8 @@ def build_docx_report():
          "A função run_multi_epoch_experiment executa consecutivamente as 100 tarefas sob parâmetros de reset de memória, reset de "
          "confiança e flutuações ambientais (noise_level, paradigm_shift_probability, reward_stability). A função "
          "run_multi_epoch_with_lesion executa 3 épocas basais, analisa a matriz de especialização consolidada, e desliga até 50% "
-         "do enxame (priorizando os especialistas dominantes com resource = 0). O L-System rege a regeneração por 10 passos sob a "
-         "regra W(10) e realoca os novos nós via T C(3) conforme a disponibilidade de recursos. O sistema roda mais 2 épocas "
+         "do enxame (priorizando os especialistas dominantes com resource = 0). O L-System rege a regeneração por 5 passos sob a "
+         "regra W(5) e realoca os novos nós via T C(3) conforme a disponibilidade de recursos. O sistema roda mais 2 épocas "
          "para quantificar a resiliência adaptativa. A robustez sistêmica é avaliada em três perfis: estável (sem ruído), "
          "semi-estável (10% ruído, 5% shift) e caótico (30% ruído, 20% shift)."),
         
@@ -469,7 +469,7 @@ def build_docx_report():
          "Consolidação experimental sobre 30 sementes estocásticas independentes com isolamento absoluto de cache inferencial. "
          "Parâmetros mantidos estritamente constantes: enxame de 8 agentes, log episódico de capacidade 10, tamanho vetorial máximo 10, "
          "limiar de poda 0.25, decaimento global 0.90, ruído Gaussiano σ = 0.02, vizinhança P2P de 3 parceiros, ganho de +10 resources, "
-         "penalidades de -5 (primário) e -2 (auxiliar), regenerative delay de 10 passos, trust incremental de +0.03 (+0.01 reciprocidade) "
+         "penalidades de -5 (primário) e -2 (auxiliar), regenerative delay de 5 passos, trust incremental de +0.03 (+0.01 reciprocidade) "
          "e decremento de -0.02, taxa de monopólio de 0.03 (teto 0.40) e hiperparâmetros LLM (Temp 0.7, Top-P 0.9, 256 tokens).")
     ]
     
@@ -645,7 +645,7 @@ def build_docx_report():
         "A dinâmica temporal do enxame submetido à lesão estrutural imposta (remoção de 50% dos resolvedores especializados "
         "ao término da época 3) está esquematizada na Figura 2. O comportamento do Grupo C, governado pelas regras de "
         "regeneração L-System, caracteriza-se pelo reestabelecimento do nível de acurácia após o intervalo transiente "
-        "de 10 passos operacionais (W(10)). Esse comportamento contrasta com o desempenho do baseline de papéis fixos "
+        "de 5 passos operacionais (W(5)). Esse comportamento contrasta com o desempenho do baseline de papéis fixos "
         "(Fixed Role Baseline), o qual regride a níveis nulos de acurácia sem recuperação estrutural."
     )
 
@@ -785,7 +785,7 @@ def build_docx_report():
         "foi evidenciada pelo teste de lesão estrutural (Figura 2). Na biologia vegetal, a abscisão de órgãos senescentes e o direcionamento "
         "do crescimento por sinalização hormonal (Sachs, 1981) asseguram resiliência e adaptação sob stresse ambiental. Computacionalmente, "
         "a exclusão ativa de nós com recursos exauridos e a subsequente inserção de novos microagentes indiferenciados, orientada pela "
-        "derivação de regras do L-System (atraso W(10) e reconexão contextual C(3)), propiciaram a recuperação completa do desempenho de "
+        "derivação de regras do L-System (atraso W(5) e reconexão contextual C(3)), propiciaram a recuperação completa do desempenho de "
         "tarefas. Por outro lado, a rigidez do baseline de papéis fixos resultou em colapso permanente do sistema. Isso indica que a "
         "dinâmica topológica vegetal aplicada a sistemas computacionais confere plasticidade adaptativa e capacidade de autorreparação, "
         "validando esta vertente da hipótese operacional.",
