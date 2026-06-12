@@ -52,20 +52,40 @@ class HierarchicalMemory:
                 json_format=True
             )
             import json
-            data = json.loads(resp["text"])
-            facts = data.get("facts", [])
+            text = resp["text"].strip()
+            facts = []
+            try:
+                data = json.loads(text)
+                facts = data.get("facts", [])
+            except Exception:
+                import re
+                match = re.search(r'"facts"\s*:\s*(\[[^\]]*\])', text, re.DOTALL)
+                if match:
+                    try:
+                        facts = json.loads(match.group(1))
+                    except Exception:
+                        pass
+            
+            if not isinstance(facts, list):
+                if isinstance(facts, str):
+                    facts = [facts]
+                elif isinstance(facts, dict):
+                    facts = list(facts.values())
+                else:
+                    facts = []
             
             for fact in facts:
-                fact = fact.strip()
-                if fact:
-                    # Save the atomic fact in the local vector store
-                    emb = client.get_embeddings(fact)
-                    self.vector_store.add_document(
-                        text=fact,
-                        embedding=emb,
-                        metadata={"type": "atomic_fact", "timestamp": time.time()}
-                    )
-                    print(f"[Memory System] Saved local atomic fact: '{fact[:60]}...'")
+                if isinstance(fact, str):
+                    fact = fact.strip()
+                    if fact:
+                        # Save the atomic fact in the local vector store
+                        emb = client.get_embeddings(fact)
+                        self.vector_store.add_document(
+                            text=fact,
+                            embedding=emb,
+                            metadata={"type": "atomic_fact", "timestamp": time.time()}
+                        )
+                        print(f"[Memory System] Saved local atomic fact: '{fact[:60]}...'")
             
             # Synthesize Reflections
             self.synthesize_reflections(client)
@@ -118,8 +138,33 @@ class HierarchicalMemory:
                     json_format=True
                 )
                 import json
-                data = json.loads(resp["text"])
-                reflection = data.get("reflection", "").strip()
+                text = resp["text"].strip()
+                reflection = ""
+                try:
+                    data = json.loads(text)
+                    reflection = data.get("reflection", "")
+                except Exception:
+                    import re
+                    match = re.search(r'"reflection"\s*:\s*"([^"]+)"', text)
+                    if match:
+                        reflection = match.group(1)
+                    else:
+                        match2 = re.search(r'"reflection"\s*:\s*(\{.*\})', text, re.DOTALL)
+                        if match2:
+                            try:
+                                sub_data = json.loads(match2.group(1))
+                                reflection = next((v for v in sub_data.values() if isinstance(v, str)), "")
+                            except Exception:
+                                pass
+                
+                if isinstance(reflection, dict):
+                    reflection = next((v for v in reflection.values() if isinstance(v, str)), "")
+                elif isinstance(reflection, list):
+                    reflection = " ".join([str(x) for x in reflection])
+                else:
+                    reflection = str(reflection)
+                
+                reflection = reflection.strip()
                 
                 if reflection:
                     ref_emb = client.get_embeddings(reflection)
