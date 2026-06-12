@@ -835,7 +835,12 @@ def build_docx_report():
         "de nós especialistas dominantes de forma dinâmica, reestruturando suas arestas de comunicação por meio da modulação de "
         "lances competitivos de monopólio e direcionamento de novos brotos. Esta capacidade de adaptação sistêmica assegura uma "
         "alternativa viável e de baixo custo energético para a implantação de inteligência coletiva em computação de borda (Edge), "
-        "superando a rigidez e o esquecimento catastrófico que tipificam os modelos monolíticos e centralizados convencionais."
+        "superando a rigidez e o esquecimento catastrófico que tipificam os modelos monolíticos e centralizados convencionais.",
+
+        "Apesar dos ganhos, a acurácia ainda decai. Para aplicações que exigem desempenho sustentado por muitas épocas, recomenda‑se: "
+        "(a) aumentar a taxa de decaimento de etileno em períodos de falha; (b) introduzir um limite superior para o número de "
+        "invocações micorrízicas consecutivas, para evitar a formação de dependência; (c) calibrar a função de hormese com dados "
+        "empíricos sobre a carga cognitiva ótima (que neste experimento parece situar‑se em torno de 1,0)."
     ]
     for text in conc_texts:
         p = doc.add_paragraph()
