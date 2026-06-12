@@ -48,11 +48,29 @@ class MicroAgent:
         min_sim_dynamic = 0.12 * (load ** 2) - 0.22 * load + 0.45
         min_sim_dynamic = max(0.1, min(0.95, min_sim_dynamic))
         
-        # Retrieve semantic context from somatic memory
+        # Retrieve semantic context from somatic memory (local atomic facts)
         if self.use_somatic_memory:
             semantic_context = self.memory.retrieve_context(problem, self.client, min_similarity=min_sim_dynamic)
             if semantic_context:
                 prompt_parts.append(semantic_context)
+
+        # Local thermodynamic/soil connection (Global Memory Network Access)
+        epigenetic_stress = self.cognitive_load * 0.5 + getattr(self, 'ethylene_level', 0.0) * 0.5
+        if self.cognitive_load > 1.5 and epigenetic_stress > 1.0:
+            GLOBAL_COMMUNICATION_COST = 2
+            self.adjust_resource(-GLOBAL_COMMUNICATION_COST)
+            q_emb = self.client.get_embeddings(problem)
+            global_matches = self.memory.global_network.query(q_emb, limit=1, min_similarity=0.3)
+            if global_matches:
+                reflection = global_matches[0]["text"]
+                facts = global_matches[0]["source_facts"]
+                facts_str = "\n".join([f"- {f}" for f in facts])
+                prompt_parts.append(
+                    f"\n=== Global Shared Reflection (Soil Access) ===\n"
+                    f"Reflection: {reflection}\n"
+                    f"Supporting Atomic Facts:\n{facts_str}"
+                )
+                print(f"      [Soil Access] Agent {self.agent_id} retrieved global reflection: '{reflection[:40]}...'")
 
         # Mycorrhizal Symbiosis (Exocrine Memory P2P)
         used_mycorrhizal = False
@@ -80,12 +98,14 @@ class MicroAgent:
                     best_neighbor_id = low_load_peers[0]
                     best_neighbor = agents[best_neighbor_id]
                     
-                    # Query neighbor's somatic memory
-                    neighbor_lesson = best_neighbor.memory.retrieve_context(problem, self.client, min_similarity=0.35)
-                    if neighbor_lesson:
-                        prompt_parts.append(f"\n=== Mycorrhizal Symbiotic Knowledge from {best_neighbor_id} ===\n{neighbor_lesson}")
+                    # Mycorrhizal policy distillation
+                    policy = best_neighbor.memory.distill_expert_policy(problem, self.client)
+                    if policy:
+                        prompt_parts.append(f"\n[DIRETRIZ FEDERADA DO ESPECIALISTA]: {policy}")
+                        # Deduct synthesis cost (-3 resources) from helper_id (Especialista)
+                        best_neighbor.adjust_resource(-3)
                         used_mycorrhizal = True
-                        print(f"      [Mycorrhizal Symbiosis] Agent {self.agent_id} retrieved exocrine pattern from {best_neighbor_id}.")
+                        print(f"      [Mycorrhizal Symbiosis] Agent {self.agent_id} retrieved distilled policy from {best_neighbor_id} (helper paid synthesis cost).")
             else:
                 print(f"      [Gated Communication] Agent {self.agent_id} gated mycorrhizal query (Uncertainty: {uncertainty:.2f}).")
                 return {
@@ -128,7 +148,8 @@ class MicroAgent:
             "text": resp["text"],
             "is_mutated": is_mutated,
             "mycorrhizal_used": used_mycorrhizal,
-            "mycorrhizal_helper_id": best_neighbor_id if used_mycorrhizal else None
+            "mycorrhizal_helper_id": best_neighbor_id if used_mycorrhizal else None,
+            "distilled_policy": policy if (used_mycorrhizal and 'policy' in locals()) else None
         }
 
     def record_attempt(self, output, feedback, success, prompt=""):

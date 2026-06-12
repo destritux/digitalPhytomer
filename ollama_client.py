@@ -69,7 +69,7 @@ class OllamaClient:
             print(f"[Ollama Error] Network error during pull: {e}")
             return False
 
-    def generate(self, prompt, system_prompt=None, temperature=0.7, model_name=None, max_tokens=None):
+    def generate(self, prompt, system_prompt=None, temperature=0.7, model_name=None, max_tokens=None, json_format=False):
         if model_name is None:
             model_name = self.default_model
         if max_tokens is None:
@@ -77,7 +77,7 @@ class OllamaClient:
 
         # Construir chave única para o cache baseada no prompt, seed, temperatura e modelo
         seed_val = str(self.current_seed) if self.current_seed is not None else "no_seed"
-        cache_str = f"{prompt}||{system_prompt}||{temperature}||{model_name}||{max_tokens}||{seed_val}"
+        cache_str = f"{prompt}||{system_prompt}||{temperature}||{model_name}||{max_tokens}||{seed_val}||{json_format}"
         cache_key = hashlib.md5(cache_str.encode('utf-8')).hexdigest()
 
         if cache_key in self.cache:
@@ -113,6 +113,8 @@ class OllamaClient:
             "stream": False,
             "options": options
         }
+        if json_format:
+            payload["format"] = "json"
         if system_prompt:
             payload["system"] = system_prompt
 

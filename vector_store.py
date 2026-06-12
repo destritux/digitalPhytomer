@@ -246,3 +246,46 @@ class SomaticVectorStore:
 
     def size(self):
         return len(self.documents)
+
+class GlobalMemoryNetwork:
+    def __init__(self):
+        # List of dicts: {"text": str, "embedding": np.ndarray, "source_facts": list of str, "relevance": float}
+        self.reflections = []
+
+    def push_reflection(self, text, embedding, source_facts):
+        self.reflections.append({
+            "text": text,
+            "embedding": np.array(embedding),
+            "source_facts": source_facts,
+            "relevance": 1.0
+        })
+
+    def query(self, query_embedding, limit=3, min_similarity=0.3):
+        if len(self.reflections) == 0:
+            return []
+        
+        q_arr = np.array(query_embedding)
+        norm_q = np.linalg.norm(q_arr)
+        if norm_q > 0:
+            q_arr = q_arr / norm_q
+        
+        matches = []
+        for ref in self.reflections:
+            ref_emb = ref["embedding"]
+            norm_ref = np.linalg.norm(ref_emb)
+            if norm_ref > 0:
+                ref_emb = ref_emb / norm_ref
+            
+            sim = float(np.dot(q_arr, ref_emb))
+            score = sim * ref.get("relevance", 1.0)
+            if score >= min_similarity:
+                matches.append({
+                    "text": ref["text"],
+                    "source_facts": ref["source_facts"],
+                    "score": score
+                })
+        
+        matches.sort(key=lambda x: x["score"], reverse=True)
+        return matches[:limit]
+
+global_memory_network = GlobalMemoryNetwork()

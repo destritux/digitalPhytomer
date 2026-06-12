@@ -1056,14 +1056,23 @@ def run_swarm(
             myco_helper_id = res.get("mycorrhizal_helper_id")
             
             if res.get("mycorrhizal_used", False) and myco_helper_id in active_ids:
-                # 1. Transferência de Capital
+                # 1. Transferência de Capital (MEPD-PPO Reward: specialist receives synthesis cost + 200% base reward)
                 primary.adjust_resource(int(REWARD * 0.5))
-                agents[myco_helper_id].adjust_resource(int(REWARD * 1.5))
+                agents[myco_helper_id].adjust_resource(3 + int(REWARD * 2.0))
                 # 2. Imunidade Alostática
                 agents[myco_helper_id].cognitive_load = 0.0
                 # 3. Spike Hebbiano
                 primary.trust_scores[myco_helper_id] = min(1.0, primary.trust_scores.get(myco_helper_id, 0.5) + DELTA_SUCCESS * 3)
-                print(f"      [Credit Assignment] Mycorrhizal helper {myco_helper_id} rewarded (REWARD * 1.5), primary {primary_id} (REWARD * 0.5)")
+                # 4. Student Learning: Student incorporates distilled policy into local atomic facts
+                distilled_policy = res.get("distilled_policy")
+                if distilled_policy:
+                    emb_policy = client.get_embeddings(distilled_policy)
+                    primary.memory.vector_store.add_document(
+                        text=distilled_policy,
+                        embedding=emb_policy,
+                        metadata={"type": "atomic_fact", "timestamp": time.time(), "source": "federated_distillation"}
+                    )
+                print(f"      [MEPD-PPO Reward] Myco helper {myco_helper_id} refunded & rewarded +200%, primary {primary_id} (REWARD * 0.5) learned distilled policy.")
             else:
                 primary.adjust_resource(REWARD)
             
@@ -1147,14 +1156,23 @@ def run_swarm(
                     myco_helper_id = helper_res.get("mycorrhizal_helper_id")
                     
                     if helper_res.get("mycorrhizal_used", False) and myco_helper_id in active_ids:
-                        # 1. Transferência de Capital
+                        # 1. Transferência de Capital (MEPD-PPO Reward: specialist receives synthesis cost + 200% base reward)
                         helper.adjust_resource(int(REWARD * 0.5))
-                        agents[myco_helper_id].adjust_resource(int(REWARD * 1.5))
+                        agents[myco_helper_id].adjust_resource(3 + int(REWARD * 2.0))
                         # 2. Imunidade Alostática
                         agents[myco_helper_id].cognitive_load = 0.0
                         # 3. Spike Hebbiano
                         helper.trust_scores[myco_helper_id] = min(1.0, helper.trust_scores.get(myco_helper_id, 0.5) + DELTA_SUCCESS * 3)
-                        print(f"      [Credit Assignment] Mycorrhizal helper {myco_helper_id} rewarded (REWARD * 1.5), delegation helper {helper_id} (REWARD * 0.5)")
+                        # 4. Student Learning: Student incorporates distilled policy into local atomic facts
+                        distilled_policy = helper_res.get("distilled_policy")
+                        if distilled_policy:
+                            emb_policy = client.get_embeddings(distilled_policy)
+                            helper.memory.vector_store.add_document(
+                                text=distilled_policy,
+                                embedding=emb_policy,
+                                metadata={"type": "atomic_fact", "timestamp": time.time(), "source": "federated_distillation"}
+                            )
+                        print(f"      [MEPD-PPO Reward] Myco helper {myco_helper_id} refunded & rewarded +200%, delegation helper {helper_id} (REWARD * 0.5) learned distilled policy.")
                     else:
                         helper.adjust_resource(REWARD)
                     
@@ -1225,6 +1243,13 @@ def run_swarm(
             if agents[aid].use_somatic_memory:
                 agents[aid].memory.vector_store.apply_temporal_decay(active_texts)
                 agents[aid].memory.vector_store.prune_low_relevance_vectors()
+                
+        # Passive trust decay towards baseline (0.5) to mitigate permanent dependency
+        for aid in active_ids:
+            agent = agents[aid]
+            for bid in list(agent.trust_scores.keys()):
+                current_trust = agent.trust_scores[bid]
+                agent.trust_scores[bid] = current_trust + 0.01 * (0.5 - current_trust)
                 
         # 3. Calculate sliding-window metrics
         window_start = max(0, step - 9)
