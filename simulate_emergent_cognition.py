@@ -977,6 +977,7 @@ def run_swarm(
             neighbor_map[aid] = peers[:NEIGHBORHOOD_SIZE]
             
         # 1. Bidding based on competence (somatic memory similarity) and monopoly tax
+        q_emb = client.get_embeddings(prompt)
         bids = {}
         for aid in active_ids:
             agent = agents[aid]
@@ -985,8 +986,15 @@ def run_swarm(
             mu_global = np.mean(global_resources) if global_resources else 100.0
             
             local_neighbors = neighbor_map.get(aid, [])
-            local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
-            mu_local = np.mean(local_resources) if local_resources else mu_global
+            weighted_resources = []
+            alphas = []
+            for peer in local_neighbors:
+                if peer in active_ids:
+                    peer_matches = agents[peer].memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+                    alpha_ij = peer_matches[0]["score"] if peer_matches else 0.1
+                    weighted_resources.append(alpha_ij * agents[peer].resource)
+                    alphas.append(alpha_ij)
+            mu_local = sum(weighted_resources) / sum(alphas) if alphas else mu_global
             
             ratio = mu_global / (mu_local + 0.001)
             monopoly_tax = TAU_MONOPOLY * (1.0 + 0.5 * getattr(agent, 'cognitive_load', 0.0)) * ratio
@@ -994,7 +1002,6 @@ def run_swarm(
             
             competence = 0.0
             if use_somatic_memory:
-                q_emb = client.get_embeddings(prompt)
                 matches = agent.memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
                 if matches:
                     doc_domain = matches[0]["metadata"].get("domain")
@@ -1012,8 +1019,15 @@ def run_swarm(
         global_resources = [agents[x].resource for x in active_ids]
         mu_global = np.mean(global_resources) if global_resources else 100.0
         local_neighbors = neighbor_map.get(primary_id, [])
-        local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
-        mu_local = np.mean(local_resources) if local_resources else mu_global
+        weighted_resources = []
+        alphas = []
+        for peer in local_neighbors:
+            if peer in active_ids:
+                peer_matches = agents[peer].memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+                alpha_ij = peer_matches[0]["score"] if peer_matches else 0.1
+                weighted_resources.append(alpha_ij * agents[peer].resource)
+                alphas.append(alpha_ij)
+        mu_local = sum(weighted_resources) / sum(alphas) if alphas else mu_global
         ratio = mu_global / (mu_local + 0.001)
         primary_tax = min(0.8, TAU_MONOPOLY * (1.0 + 0.5 * getattr(primary, 'cognitive_load', 0.0)) * ratio)
         print(f"  [Bid Won] Unit {primary_id} claims task (Monopoly Tax: {primary_tax*100:.1f}%)")
@@ -1038,8 +1052,21 @@ def run_swarm(
         
         if success:
             print(f"  [Primary Success] Unit {primary_id} resolved the task.")
-            # Reward agent resource
-            primary.adjust_resource(int(10 * reward_stability))
+            REWARD = int(10 * reward_stability)
+            myco_helper_id = res.get("mycorrhizal_helper_id")
+            
+            if res.get("mycorrhizal_used", False) and myco_helper_id in active_ids:
+                # 1. Transferência de Capital
+                primary.adjust_resource(int(REWARD * 0.5))
+                agents[myco_helper_id].adjust_resource(int(REWARD * 1.5))
+                # 2. Imunidade Alostática
+                agents[myco_helper_id].cognitive_load = 0.0
+                # 3. Spike Hebbiano
+                primary.trust_scores[myco_helper_id] = min(1.0, primary.trust_scores.get(myco_helper_id, 0.5) + DELTA_SUCCESS * 3)
+                print(f"      [Credit Assignment] Mycorrhizal helper {myco_helper_id} rewarded (REWARD * 1.5), primary {primary_id} (REWARD * 0.5)")
+            else:
+                primary.adjust_resource(REWARD)
+            
             # Record success pattern in somatic memory
             if use_somatic_memory:
                 emb = client.get_embeddings(prompt)
@@ -1064,14 +1091,20 @@ def run_swarm(
                     global_resources = [agents[x].resource for x in active_ids]
                     mu_global = np.mean(global_resources) if global_resources else 100.0
                     local_neighbors = neighbor_map.get(aid, [])
-                    local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
-                    mu_local = np.mean(local_resources) if local_resources else mu_global
+                    weighted_resources = []
+                    alphas = []
+                    for peer in local_neighbors:
+                        if peer in active_ids:
+                            peer_matches = agents[peer].memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+                            alpha_ij = peer_matches[0]["score"] if peer_matches else 0.1
+                            weighted_resources.append(alpha_ij * agents[peer].resource)
+                            alphas.append(alpha_ij)
+                    mu_local = sum(weighted_resources) / sum(alphas) if alphas else mu_global
                     ratio = mu_global / (mu_local + 0.001)
                     monopoly_tax = min(0.8, TAU_MONOPOLY * (1.0 + 0.5 * getattr(agent, 'cognitive_load', 0.0)) * ratio)
                     
                     competence = 0.0
                     if use_somatic_memory:
-                        q_emb = client.get_embeddings(prompt)
                         matches = agent.memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
                         if matches:
                             doc_domain = matches[0]["metadata"].get("domain")
@@ -1110,9 +1143,20 @@ def run_swarm(
                 if final_success:
                     print(f"    [Helper Success] Helper {helper_id} resolved delegated task.")
                     final_solver_id = helper_id
+                    REWARD = int(10 * reward_stability)
+                    myco_helper_id = helper_res.get("mycorrhizal_helper_id")
                     
-                    # Reward helper
-                    helper.adjust_resource(int(10 * reward_stability))
+                    if helper_res.get("mycorrhizal_used", False) and myco_helper_id in active_ids:
+                        # 1. Transferência de Capital
+                        helper.adjust_resource(int(REWARD * 0.5))
+                        agents[myco_helper_id].adjust_resource(int(REWARD * 1.5))
+                        # 2. Imunidade Alostática
+                        agents[myco_helper_id].cognitive_load = 0.0
+                        # 3. Spike Hebbiano
+                        helper.trust_scores[myco_helper_id] = min(1.0, helper.trust_scores.get(myco_helper_id, 0.5) + DELTA_SUCCESS * 3)
+                        print(f"      [Credit Assignment] Mycorrhizal helper {myco_helper_id} rewarded (REWARD * 1.5), delegation helper {helper_id} (REWARD * 0.5)")
+                    else:
+                        helper.adjust_resource(REWARD)
                     
                     # Record success pattern in helper's somatic memory
                     if use_somatic_memory:

@@ -56,21 +56,46 @@ class MicroAgent:
 
         # Mycorrhizal Symbiosis (Exocrine Memory P2P)
         used_mycorrhizal = False
+        best_neighbor_id = None
         if self.failures_count >= 2 and self.cognitive_load > 1.5 and agents is not None:
-            # Find low cognitive load active neighbors (< 1.0)
-            active_peers = [bid for bid, b_agent in agents.items() if bid != self.agent_id and not b_agent.is_depleted()]
-            low_load_peers = [bid for bid in active_peers if agents[bid].cognitive_load < 1.0]
-            if low_load_peers:
-                low_load_peers.sort(key=lambda bid: self.trust_scores.get(bid, 0.5), reverse=True)
-                best_neighbor_id = low_load_peers[0]
-                best_neighbor = agents[best_neighbor_id]
+            # Gated Communication check
+            COMMUNICATION_COST = 2
+            REWARD = 10
+            
+            # Query local memory score to evaluate uncertainty
+            q_emb = self.client.get_embeddings(problem)
+            matches = self.memory.vector_store.query(q_emb, limit=1, min_similarity=0.0)
+            best_local_memory_score = matches[0]["score"] if matches else 0.0
+            uncertainty = 1.0 - best_local_memory_score
+            
+            if (uncertainty * REWARD) > COMMUNICATION_COST:
+                # Deduct communication cost from balance
+                self.adjust_resource(-COMMUNICATION_COST)
                 
-                # Query neighbor's somatic memory
-                neighbor_lesson = best_neighbor.memory.retrieve_context(problem, self.client, min_similarity=0.35)
-                if neighbor_lesson:
-                    prompt_parts.append(f"\n=== Mycorrhizal Symbiotic Knowledge from {best_neighbor_id} ===\n{neighbor_lesson}")
-                    used_mycorrhizal = True
-                    print(f"      [Mycorrhizal Symbiosis] Agent {self.agent_id} retrieved exocrine pattern from {best_neighbor_id}.")
+                # Find low cognitive load active neighbors (< 1.0)
+                active_peers = [bid for bid, b_agent in agents.items() if bid != self.agent_id and not b_agent.is_depleted()]
+                low_load_peers = [bid for bid in active_peers if agents[bid].cognitive_load < 1.0]
+                if low_load_peers:
+                    low_load_peers.sort(key=lambda bid: self.trust_scores.get(bid, 0.5), reverse=True)
+                    best_neighbor_id = low_load_peers[0]
+                    best_neighbor = agents[best_neighbor_id]
+                    
+                    # Query neighbor's somatic memory
+                    neighbor_lesson = best_neighbor.memory.retrieve_context(problem, self.client, min_similarity=0.35)
+                    if neighbor_lesson:
+                        prompt_parts.append(f"\n=== Mycorrhizal Symbiotic Knowledge from {best_neighbor_id} ===\n{neighbor_lesson}")
+                        used_mycorrhizal = True
+                        print(f"      [Mycorrhizal Symbiosis] Agent {self.agent_id} retrieved exocrine pattern from {best_neighbor_id}.")
+            else:
+                print(f"      [Gated Communication] Agent {self.agent_id} gated mycorrhizal query (Uncertainty: {uncertainty:.2f}).")
+                return {
+                    "success": False,
+                    "escalate": False,
+                    "text": "Mycorrhizal communication gated due to low expected value.",
+                    "is_mutated": False,
+                    "mycorrhizal_used": False,
+                    "mycorrhizal_helper_id": None
+                }
 
         # Retrieve episodic local attempts
         episodic_context = self.memory.get_memory_context()
@@ -102,7 +127,8 @@ class MicroAgent:
             "escalate": False,
             "text": resp["text"],
             "is_mutated": is_mutated,
-            "mycorrhizal_used": used_mycorrhizal
+            "mycorrhizal_used": used_mycorrhizal,
+            "mycorrhizal_helper_id": best_neighbor_id if used_mycorrhizal else None
         }
 
     def record_attempt(self, output, feedback, success, prompt=""):
