@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+import hashlib
 
 class OllamaClient:
     def __init__(self, base_url="http://localhost:11434", default_model="qwen2.5:0.5b"):
@@ -10,13 +11,14 @@ class OllamaClient:
         self.total_completion_tokens = 0
         self.total_calls = 0
         self.model_stats = {}
+        self.cache = {}
 
     def pull_model(self, model_name=None):
         if model_name is None:
             model_name = self.default_model
         
         try:
-            resp = requests.get(f"{self.base_url}/api/tags")
+            resp = requests.get(f"{self.base_url}/api/tags", timeout=10.0)
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 names = [m["name"] for m in models]
@@ -31,7 +33,7 @@ class OllamaClient:
         data = {"name": model_name, "stream": False}
         
         try:
-            resp = requests.post(url, json=data)
+            resp = requests.post(url, json=data, timeout=300.0)
             if resp.status_code == 200:
                 print(f"[Ollama] Successfully pulled '{model_name}'.")
                 return True
@@ -64,7 +66,7 @@ class OllamaClient:
 
         self.total_calls += 1
         try:
-            resp = requests.post(url, json=payload)
+            resp = requests.post(url, json=payload, timeout=60.0)
             if resp.status_code == 200:
                 result = resp.json()
                 response_text = result.get("response", "")
@@ -99,10 +101,35 @@ class OllamaClient:
             print(f"[Ollama Error] Connection exception: {e}")
             return {"text": "", "prompt_tokens": 0, "completion_tokens": 0, "success": False}
 
-    def get_embeddings(self, text, model_name=None):
-        import hashlib
+    def get_embeddings(self, text, model_name="nomic-embed-text"):
+        """
+        Generates a semantic embedding using Ollama's nomic-embed-text model.
+        Falls back to a robust 768-dimensional local feature hashing if Ollama is unavailable
+        or fails, preserving dimension consistency and execution safety.
+        """
+        cache_key = f"emb||{model_name}||{hashlib.md5(text.encode('utf-8')).hexdigest()}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        url = f"{self.base_url}/api/embeddings"
+        payload = {
+            "model": model_name,
+            "prompt": text
+        }
+        try:
+            resp = requests.post(url, json=payload, timeout=5.0)
+            if resp.status_code == 200:
+                result = resp.json()
+                embedding = result.get("embedding", [])
+                if embedding:
+                    self.cache[cache_key] = embedding
+                    return embedding
+        except Exception as e:
+            pass
+
+        # Fallback: Deterministic Feature Hashing of size 768 to match nomic-embed-text
         import numpy as np
-        dimensions = 256
+        dimensions = 768
         vec = [0.0] * dimensions
         
         words = re.findall(r'\w+', text.lower())
