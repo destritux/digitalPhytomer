@@ -15,6 +15,9 @@ class MicroAgent:
         self.use_somatic_memory = True
         self.memory = HierarchicalMemory(somatic_memory)
         self.context_budget = 2000
+        self.cognitive_load = 0.0
+        self.ethylene_level = 0.0
+        self.base_temperature = 0.3
 
     @property
     def local_memory(self):
@@ -24,7 +27,7 @@ class MicroAgent:
     def local_memory(self, val):
         self.memory.episodic_log = val
 
-    def solve(self, problem, mutation_rate=0.01, model_name=None):
+    def solve(self, problem, mutation_rate=0.01, model_name=None, agents=None):
         """
         Attempts to solve a problem locally. 
         """
@@ -33,17 +36,41 @@ class MicroAgent:
                 "success": False,
                 "escalate": True,
                 "text": f"Agent {self.agent_id} failed locally {self.failures_count} times. Escalating.",
-                "is_mutated": False
+                "is_mutated": False,
+                "mycorrhizal_used": False
             }
 
         # Build prompt incorporating local memory
         prompt_parts = []
         
+        # Hormesis Effect in RAG-VM (Inverted U-Curve)
+        load = self.cognitive_load
+        min_sim_dynamic = 0.12 * (load ** 2) - 0.22 * load + 0.45
+        min_sim_dynamic = max(0.1, min(0.95, min_sim_dynamic))
+        
         # Retrieve semantic context from somatic memory
         if self.use_somatic_memory:
-            semantic_context = self.memory.retrieve_context(problem, self.client)
+            semantic_context = self.memory.retrieve_context(problem, self.client, min_similarity=min_sim_dynamic)
             if semantic_context:
                 prompt_parts.append(semantic_context)
+
+        # Mycorrhizal Symbiosis (Exocrine Memory P2P)
+        used_mycorrhizal = False
+        if self.failures_count >= 2 and self.cognitive_load > 1.5 and agents is not None:
+            # Find low cognitive load active neighbors (< 1.0)
+            active_peers = [bid for bid, b_agent in agents.items() if bid != self.agent_id and not b_agent.is_depleted()]
+            low_load_peers = [bid for bid in active_peers if agents[bid].cognitive_load < 1.0]
+            if low_load_peers:
+                low_load_peers.sort(key=lambda bid: self.trust_scores.get(bid, 0.5), reverse=True)
+                best_neighbor_id = low_load_peers[0]
+                best_neighbor = agents[best_neighbor_id]
+                
+                # Query neighbor's somatic memory
+                neighbor_lesson = best_neighbor.memory.retrieve_context(problem, self.client, min_similarity=0.35)
+                if neighbor_lesson:
+                    prompt_parts.append(f"\n=== Mycorrhizal Symbiotic Knowledge from {best_neighbor_id} ===\n{neighbor_lesson}")
+                    used_mycorrhizal = True
+                    print(f"      [Mycorrhizal Symbiosis] Agent {self.agent_id} retrieved exocrine pattern from {best_neighbor_id}.")
 
         # Retrieve episodic local attempts
         episodic_context = self.memory.get_memory_context()
@@ -58,7 +85,7 @@ class MicroAgent:
         
         # Dynamic Mutation Check (simplifies temperature control, removes text warnings)
         is_mutated = random.random() < mutation_rate
-        temp = 0.8 if is_mutated else 0.3
+        temp = 0.8 if is_mutated else getattr(self, 'base_temperature', 0.3)
         
         full_prompt = "\n".join(prompt_parts)
 
@@ -74,7 +101,8 @@ class MicroAgent:
             "success": resp["success"],
             "escalate": False,
             "text": resp["text"],
-            "is_mutated": is_mutated
+            "is_mutated": is_mutated,
+            "mycorrhizal_used": used_mycorrhizal
         }
 
     def record_attempt(self, output, feedback, success, prompt=""):
@@ -91,6 +119,8 @@ class MicroAgent:
             self.failures_count = 0
         else:
             self.failures_count += 1
+            # ppGpp-like stress signaling (acute ethylene/ppGpp synthesis delta)
+            self.ethylene_level = getattr(self, 'ethylene_level', 0.0) + 0.5
 
     def adjust_resource(self, amount):
         """

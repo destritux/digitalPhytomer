@@ -3,8 +3,70 @@ import time
 
 class SomaticVectorStore:
     def __init__(self):
-        # List of dicts: {"text": str, "embedding": np.ndarray, "relevance": float, "usage_count": int, "metadata": dict}
+        # List of dicts: {"text": str, "raw_embedding": np.ndarray, "diffused_embedding": np.ndarray, "embedding": np.ndarray, "relevance": float, "usage_count": int, "metadata": dict}
         self.documents = []
+        self.env_cost_pi = 0.0
+        self.rho = 0.1
+        self.pi_0 = 0.4
+        self.T_pi = 0.1
+
+    def _update_diffused_embeddings(self):
+        if not self.documents:
+            return
+        
+        n = len(self.documents)
+        if n <= 1:
+            for doc in self.documents:
+                doc["diffused_embedding"] = doc["raw_embedding"]
+                doc["embedding"] = doc["raw_embedding"]
+            return
+        
+        # Extract raw embeddings: N x d matrix
+        phi = np.array([doc["raw_embedding"] for doc in self.documents])
+        
+        # Parameters for RAG-VM
+        alpha = 0.5
+        sigma = 1.0
+        kappa = 0.5
+        k = min(3, n - 1)
+        
+        # Build adjacency matrix W
+        W = np.zeros((n, n))
+        for i in range(n):
+            dists = np.linalg.norm(phi - phi[i], axis=1)
+            neighbors = np.argsort(dists)[1:k+1]
+            for j in neighbors:
+                dist_sq = dists[j] ** 2
+                w_val = np.exp(-dist_sq / (sigma ** 2)) * np.exp(-kappa * dist_sq)
+                W[i, j] = w_val
+                W[j, i] = w_val
+                
+        # Normalized Laplacian L = I - D^{-1/2} W D^{-1/2}
+        degrees = np.sum(W, axis=1)
+        D_inv_sqrt = np.zeros(n)
+        for i in range(n):
+            if degrees[i] > 0:
+                D_inv_sqrt[i] = 1.0 / np.sqrt(degrees[i])
+        D_inv_sqrt_mat = np.diag(D_inv_sqrt)
+        
+        L = np.eye(n) - D_inv_sqrt_mat @ W @ D_inv_sqrt_mat
+        
+        # e^{-alpha L}
+        eigenvalues, eigenvectors = np.linalg.eigh(L)
+        exp_diag = np.exp(-alpha * eigenvalues)
+        exp_L = eigenvectors @ np.diag(exp_diag) @ eigenvectors.T
+        
+        # Compute diffused embeddings: phi_alpha = exp_L @ phi
+        phi_alpha = exp_L @ phi
+        
+        # Store diffused embeddings and normalize them
+        for i, doc in enumerate(self.documents):
+            v = phi_alpha[i]
+            norm = np.linalg.norm(v)
+            if norm > 0:
+                v = v / norm
+            doc["diffused_embedding"] = v
+            doc["embedding"] = v
 
     def add_document(self, text, embedding, metadata=None):
         if not embedding:
@@ -22,7 +84,10 @@ class SomaticVectorStore:
 
         # Memory Interference: High similarity (>0.8) reduces existing document's relevance
         for doc in self.documents:
-            similarity = float(np.dot(emb_arr, doc["embedding"]))
+            raw_emb = doc.get("raw_embedding")
+            if raw_emb is None:
+                raw_emb = doc["embedding"]
+            similarity = float(np.dot(emb_arr, raw_emb))
             if similarity > 0.8:
                 old_rel = doc["relevance"]
                 doc["relevance"] = round(doc["relevance"] * 0.95, 4)
@@ -36,6 +101,8 @@ class SomaticVectorStore:
         # Add new document with relevance=1.0, usage_count=0
         self.documents.append({
             "text": text,
+            "raw_embedding": emb_arr,
+            "diffused_embedding": emb_arr,
             "embedding": emb_arr,
             "relevance": 1.0,
             "usage_count": 0,
@@ -48,6 +115,9 @@ class SomaticVectorStore:
             self.documents.sort(key=lambda x: x["relevance"])
             removed = self.documents.pop(0)
             print(f"[Memory Capacity] Pruned lowest relevance memory node: '{removed['text'][:40]}...'")
+
+        # Run RAG-VM spectral diffusion offline
+        self._update_diffused_embeddings()
 
         return True
 
@@ -63,10 +133,28 @@ class SomaticVectorStore:
         else:
             return []
 
+        # Ensure diffused embeddings are up to date
+        self._update_diffused_embeddings()
+
         results = []
         for doc in self.documents:
-            # Cosine similarity (dot product of normalized vectors)
-            cosine_sim = float(np.dot(q_arr, doc["embedding"]))
+            # Dual-index retrieval
+            # 1. Cosine similarity on raw embeddings
+            raw_emb = doc.get("raw_embedding")
+            if raw_emb is None:
+                raw_emb = doc["embedding"]
+            cosine_sim_raw = float(np.dot(q_arr, raw_emb))
+            
+            # 2. Cosine similarity on diffused embeddings (RAG-VM)
+            diff_emb = doc.get("diffused_embedding")
+            if diff_emb is None:
+                diff_emb = doc["embedding"]
+            cosine_sim_diff = float(np.dot(q_arr, diff_emb))
+            
+            # Combine raw and diffused similarities (50% each)
+            lambda_diff = 0.5
+            cosine_sim = (1.0 - lambda_diff) * cosine_sim_raw + lambda_diff * cosine_sim_diff
+            
             # Score is cosine similarity scaled by the vector's current relevance
             score = cosine_sim * doc.get("relevance", 1.0)
             
@@ -98,6 +186,9 @@ class SomaticVectorStore:
         Applies feedback to vectors that were part of the solution context.
         Reinforces on success, decays on failure.
         """
+        c_t = 0.0 if success else 1.0
+        self.env_cost_pi = (1.0 - self.rho) * self.env_cost_pi + self.rho * c_t
+
         for doc in self.documents:
             if doc["text"] in active_texts:
                 old_rel = doc["relevance"]
@@ -111,17 +202,29 @@ class SomaticVectorStore:
 
     def apply_temporal_decay(self, active_texts, global_decay_factor=0.90):
         """
-        Applies passive temporal decay with Gaussian noise to inactive vectors.
+        Applies passive temporal decay with scale-invariant dynamics modulated by memory strength k(t).
         """
+        success = len(active_texts) > 0
+        c_t = 0.0 if success else 1.0
+        self.env_cost_pi = (1.0 - self.rho) * self.env_cost_pi + self.rho * c_t
+        
+        # Memory strength k(t) using sigmoid based on environmental cost pi(t)
+        k_t = 1.0 / (1.0 + np.exp(-(self.env_cost_pi - self.pi_0) / self.T_pi))
+
         for doc in self.documents:
             if doc["text"] not in active_texts:
                 old_rel = doc["relevance"]
+                
+                base_retention = 0.75
+                max_retention = 0.98
+                retention_factor = base_retention + (max_retention - base_retention) * k_t * doc.get("relevance", 1.0)
+                
                 noise = np.random.normal(0, 0.02)
-                decay_rate = max(0.7, min(0.99, global_decay_factor + noise))
+                decay_rate = max(0.6, min(0.99, retention_factor + noise))
                 
                 doc["relevance"] = round(doc["relevance"] * decay_rate, 4)
                 if old_rel != doc["relevance"]:
-                    print(f"[Memory Store] Passive temporal decay on inactive vector (decay_rate={decay_rate:.4f}): '{doc['text'][:40]}...' relevance {old_rel:.2f} -> {doc['relevance']:.2f}")
+                    print(f"[Memory Store] Scale-invariant decay (k_t={k_t:.3f}, decay_rate={decay_rate:.4f}): '{doc['text'][:40]}...' relevance {old_rel:.2f} -> {doc['relevance']:.2f}")
 
     def prune_low_relevance_vectors(self, threshold=0.25):
         """

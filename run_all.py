@@ -38,13 +38,13 @@ def main():
     
     # 2. Run Emergent Cognition Simulation
     run_command(
-        [python_bin, "simulate_emergent_cognition.py"],
+        [python_bin, "-u", "simulate_emergent_cognition.py"],
         "Running Emergent Cognition Simulation (simulate_emergent_cognition.py)"
     )
     
     # 3. Run Final Document Report Generator
     run_command(
-        [python_bin, "generate_final_docx.py"],
+        [python_bin, "-u", "generate_final_docx.py"],
         "Generating Final Word Document Report (generate_final_docx.py)"
     )
     

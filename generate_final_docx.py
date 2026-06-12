@@ -9,7 +9,8 @@ from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
 # Set brain directory and local results paths
-BRAIN_DIR = "/home/destritux/.gemini/antigravity-cli/brain/f86871dc-5f38-4318-85bd-adea269bee23"
+import os
+BRAIN_DIR = os.environ.get("BRAIN_DIR", "/home/destritux/.gemini/antigravity-cli/brain/c347c15b-453e-4c85-8336-a500d90ff4dc")
 RESULTS_DIR = "results"
 
 def copy_artifacts():
@@ -681,6 +682,9 @@ def build_docx_report():
         "para o Grupo A, 20,0% para o Grupo B e 20,0% para o Grupo C. Na Fase Math GSM8K (30 tarefas), a acurácia foi de 13,3% "
         "para o Grupo A, 46,7% para o Grupo B e 13,3% para o Grupo C. Na Fase BlackBox ARC (20 tarefas), a acurácia foi de 65,0% "
         "para o Grupo A, 70,0% para o Grupo B e 0,0% para o Grupo C.\n"
+        "Cabe ressaltar que os dados de desempenho por fase (Tabela 3) e os mapas de calor de engajamento dos agentes (Figuras 5 e 6) "
+        "referem-se a uma rodada única de análise (seed 42) com fins qualitativos e ilustrativos da dinâmica interna de distribuição, "
+        "não devendo ser generalizados como médias estatísticas estáveis, as quais são tratadas na avaliação longitudinal das 30 sementes independentes (Seção 3.1).\n"
         "A Figura 3 detalha a trajetória do enxame no Diagrama de Fase de Emergência, demonstrando que a entropia de coordenação "
         "decresce à medida que o sistema converge para um estado auto-organizado. "
         "A Figura 4 compara o comportamento do sistema sob diferentes regimes de incerteza ambiental (Estável, Semi-Estável e Caótico). "
@@ -783,7 +787,8 @@ def build_docx_report():
         "manteve-se em 0,3059 na época 5, em contraste com a trajetória do Grupo C-Ablated, no qual o FDI caiu para 0,0560. "
         "A diferença estatística de FDI entre o Grupo C e o Grupo C-Ablated foi estatisticamente significativa (p < 0,001, Tabela 2), "
         "o que corrobora a premissa de que os mecanismos de memória e confiança relacional atuam como fatores causais de especialização "
-        "funcional descentralizada, alinhando-se com a literatura clássica de auto-organização em sistemas biológicos (Camazine et al., 2001).",
+        "funcional descentralizada, alinhando-se com a literatura clássica de auto-organização em sistemas biológicos (Camazine et al., 2001). "
+        "Embora o engajamento e a diferenciação de nós individuais (como de Cell-001 a Cell-008) tenham sido mapeados pontualmente por meio de uma rodada única de análise (Figuras 5 e 6) para ilustrar qualitativamente o processo de especialização em domínios específicos, a tendência geral e persistente de auto-organização da rede é validada estatisticamente com robustez pelo comportamento longitudinal agregado nas 30 sementes independentes.",
         
         "A resiliência sistêmica da topologia proposta, regulada por mecanismos alostáticos de abscisão e pelo rebrote via L-System, "
         "foi evidenciada pelo teste de lesão estrutural (Figura 2). Na biologia vegetal, a abscisão de órgãos senescentes e o direcionamento "

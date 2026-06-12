@@ -64,13 +64,13 @@ class HierarchicalMemory:
         # Clear episodic log (keeping only the latest/state log)
         self.episodic_log = self.episodic_log[-1:]
 
-    def retrieve_context(self, query_text: str, client) -> str:
+    def retrieve_context(self, query_text: str, client, min_similarity=0.45) -> str:
         """Retrieves semantic lessons matching the current query embedding."""
         if not client or not self.vector_store:
             return ""
         try:
             q_emb = client.get_embeddings(query_text)
-            matches = self.vector_store.query(q_emb, limit=2, min_similarity=0.45)
+            matches = self.vector_store.query(q_emb, limit=2, min_similarity=min_similarity)
             
             context_parts = []
             if matches:

@@ -11,7 +11,7 @@ import numpy as np
 import shutil
 
 # Global brain directory path
-BRAIN_DIR = os.environ.get("BRAIN_DIR", "/home/destritux/.gemini/antigravity-cli/brain/198ceb1c-4d71-4262-9e67-53cd8c6b87d1")
+BRAIN_DIR = os.environ.get("BRAIN_DIR", "/home/destritux/.gemini/antigravity-cli/brain/c347c15b-453e-4c85-8336-a500d90ff4dc")
 
 from ollama_client import OllamaClient
 from vector_store import SomaticVectorStore
@@ -26,13 +26,10 @@ verifier = CognitiveVerifier()
 import sys
 class SuppressStdout:
     def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stdout = self._original_stdout
+        pass
 
 # =====================================================================
 # EXPERIMENTAL CONFIGURATION
@@ -41,6 +38,11 @@ NUM_EPOCHS = 5
 RESET_MEMORY_BETWEEN_EPOCHS = False  # False = learning accumulates across epochs
 RESET_TRUST_BETWEEN_EPOCHS = False
 TRUST_INITIAL_VALUE = 0.5
+
+SWARM_SIZE = 20
+DELTA_SUCCESS = 0.05
+DELTA_FAILURE = 0.10
+TAU_MONOPOLY = 0.01
 
 # =====================================================================
 # 1. SCIENTIFIC DATASET DEFINITION (50 TASKS: Math -> Cyber -> Drone -> BlackBox -> Math OOD)
@@ -293,7 +295,7 @@ def run_group_random():
     client.reset_stats()
     
     agents = {}
-    for i in range(8):
+    for i in range(SWARM_SIZE):
         aid = f"Cell-{i+1:03d}"
         agents[aid] = MicroAgent(
             agent_id=aid,
@@ -335,7 +337,7 @@ def run_group_fixed(allow_lesion=False):
     client.reset_stats()
     
     agents = {}
-    for i in range(8):
+    for i in range(SWARM_SIZE):
         aid = f"Cell-{i+1:03d}"
         agents[aid] = MicroAgent(
             agent_id=aid,
@@ -423,7 +425,7 @@ def run_group_centralized():
     client.reset_stats()
     
     agents = {}
-    for i in range(8):
+    for i in range(SWARM_SIZE):
         aid = f"Cell-{i+1:03d}"
         agents[aid] = MicroAgent(
             agent_id=aid,
@@ -627,12 +629,12 @@ def save_spec_matrix_csv(spec_matrix, filename):
 
 
 def plot_specialization_heatmaps(matrix_c, matrix_c_abl, phase_name, filepath):
-    agents_list = [f"Cell-{i+1:03d}" for i in range(8)]
+    agents_list = [f"Cell-{i+1:03d}" for i in range(SWARM_SIZE)]
     domains = ["Math", "Cyber", "Drone", "BlackBox"]
     
     # Convert to 2D numpy arrays
-    data_c = np.zeros((8, 4))
-    data_abl = np.zeros((8, 4))
+    data_c = np.zeros((SWARM_SIZE, 4))
+    data_abl = np.zeros((SWARM_SIZE, 4))
     
     for idx, aid in enumerate(agents_list):
         for jdx, dom in enumerate(domains):
@@ -650,12 +652,12 @@ def plot_specialization_heatmaps(matrix_c, matrix_c_abl, phase_name, filepath):
     ax1.set_title("Group C (Emergent Swarm)", fontsize=12, fontweight="bold")
     ax1.set_xticks(range(4))
     ax1.set_xticklabels(domains, fontsize=10, fontweight="bold")
-    ax1.set_yticks(range(8))
+    ax1.set_yticks(range(SWARM_SIZE))
     ax1.set_yticklabels(agents_list)
     ax1.set_ylabel("Agents", fontsize=11, fontweight="bold")
     
     # Annotate Group C
-    for i in range(8):
+    for i in range(SWARM_SIZE):
         for j in range(4):
             ax1.text(j, i, f"{int(data_c[i, j])}", ha="center", va="center", 
                      color="black" if data_c[i, j] < vmax/2 else "white", fontweight="bold")
@@ -665,11 +667,11 @@ def plot_specialization_heatmaps(matrix_c, matrix_c_abl, phase_name, filepath):
     ax2.set_title("Group C-Ablated (No Somatic Memory)", fontsize=12, fontweight="bold")
     ax2.set_xticks(range(4))
     ax2.set_xticklabels(domains, fontsize=10, fontweight="bold")
-    ax2.set_yticks(range(8))
+    ax2.set_yticks(range(SWARM_SIZE))
     ax2.set_yticklabels([]) # Hide yticklabels for the second plot since they are the same
     
     # Annotate Group C-Ablated
-    for i in range(8):
+    for i in range(SWARM_SIZE):
         for j in range(4):
             ax2.text(j, i, f"{int(data_abl[i, j])}", ha="center", va="center", 
                      color="black" if data_abl[i, j] < vmax/2 else "white", fontweight="bold")
@@ -703,10 +705,10 @@ def run_swarm(
     # Online regeneration queue: maps agent_id -> LSystemRegenerator
     regeneration_queue = {}
     
-    # Initialize homogeneous population of N=8 agents if not provided
+    # Initialize homogeneous population of N=SWARM_SIZE agents if not provided
     if agents is None:
         agents = {}
-        for i in range(8):
+        for i in range(SWARM_SIZE):
             aid = f"Cell-{i+1:03d}"
             agents[aid] = MicroAgent(
                 agent_id=aid,
@@ -729,7 +731,9 @@ def run_swarm(
                     peers.sort(key=lambda bid: agents[aid].trust_scores.get(bid, 0.5), reverse=True)
                     original_neighbors = peers[:3]
                     
-                    regeneration_queue[aid] = LSystemRegenerator(aid, original_neighbors)
+                    local_loads = [agents[x].cognitive_load for x in original_neighbors if x in agents]
+                    local_load_mean = np.mean(local_loads) if local_loads else 0.0
+                    regeneration_queue[aid] = LSystemRegenerator(aid, original_neighbors, local_load_mean)
                     print(f"      [Regeneration] Depleted agent {aid} queued for L-System regeneration at epoch boundary.")
 
         # Sync attributes
@@ -776,6 +780,8 @@ def run_swarm(
     last_resolver_by_domain = {}
     switches_history = []
     
+    history_cognitive_load = []
+    history_mycorrhizal_calls = []
     results = []
     
     # Delegation mapping: delegations[src][dst] = count
@@ -792,12 +798,48 @@ def run_swarm(
     shift_prob = env_params.get("paradigm_shift_probability", 0.0) if env_params else 0.0
     reward_stability = env_params.get("reward_stability", 1.0) if env_params else 1.0
     
-    # Online regeneration queue: maps agent_id -> reactivation step
-    regeneration_queue = {}
+    # Online regeneration queue is initialized at line 706 and populated at line 736
+    # Do not overwrite here: regeneration_queue = {}
     
     for step, task in enumerate(tasks):
         print(f"\n[{group_name}] Step {step} Task {task['id']} ({task['domain']})...")
+        helper_id = None
+        mycorrhizal_used = False
         
+        # Passive decay of cognitive load and ethylene
+        for agent in agents.values():
+            if not agent.is_depleted():
+                agent.cognitive_load = max(0.0, getattr(agent, 'cognitive_load', 0.0) - 0.1)
+                agent.ethylene_level = round(getattr(agent, 'ethylene_level', 0.0) * np.exp(-0.2), 4)
+                
+        # Programmed Senescence check (Apoptose vs Necrose)
+        for aid in list(agents.keys()):
+            agent = agents[aid]
+            if not agent.is_depleted() and getattr(agent, 'failures_count', 0) >= 3 and getattr(agent, 'cognitive_load', 0.0) > 1.0:
+                # Find most trusted active neighbor
+                peers = [bid for bid in agents if bid != aid and not agents[bid].is_depleted()]
+                if peers:
+                    peers.sort(key=lambda bid: agent.trust_scores.get(bid, 0.5), reverse=True)
+                    best_neighbor = peers[0]
+                    # Transfer 80% resource
+                    transferred = int(agent.resource * 0.8)
+                    agent.resource -= transferred
+                    agents[best_neighbor].adjust_resource(transferred)
+                    
+                    # Transfer somatic memory patterns
+                    if agent.use_somatic_memory and agents[best_neighbor].use_somatic_memory:
+                        for doc in agent.memory.vector_store.documents:
+                            agents[best_neighbor].memory.vector_store.documents.append(doc)
+                        agents[best_neighbor].memory.vector_store._update_diffused_embeddings()
+                    
+                    print(f"      [Senescence] Inefficient cell {aid} triggered apoptosis. Transferred {transferred} energy and memory to {best_neighbor}.")
+                
+                # Force abscission
+                agent.resource = 0
+                
+        # Filter active agents (not depleted) before processing regeneration queue
+        active_ids = sorted([aid for aid, agent in agents.items() if not agent.is_depleted()])
+
         # Online regeneration processing
         if allow_regeneration:
             for aid, regenerator in list(regeneration_queue.items()):
@@ -815,16 +857,38 @@ def run_swarm(
                     if aid in agents:
                         del agents[aid]
                     
-                    # Instantiate MicroAgent with a completely clean episodic memory
+                    # Phenotypic Differentiation based on neighborhood coordination entropy
+                    neighbor_trusts = []
+                    for u in resolved_neighbors:
+                        for v in resolved_neighbors:
+                            if u != v and u in agents and v in agents:
+                                neighbor_trusts.append(agents[u].trust_scores.get(v, 0.5))
+                    neighbor_trusts = np.array(neighbor_trusts)
+                    
+                    if len(neighbor_trusts) > 0 and np.sum(neighbor_trusts) > 0:
+                        p_neighbor = neighbor_trusts / np.sum(neighbor_trusts)
+                        neighbor_entropy = -np.sum(p_neighbor * np.log2(p_neighbor + 1e-9))
+                    else:
+                        neighbor_entropy = 0.0
+                    
+                    # Threshold for chaotic neighborhood: max is ~2.58
+                    is_chaotic = neighbor_entropy > 1.5
+                    
+                    temp_val = 0.1 if is_chaotic else 0.8
+                    strat_val = "split_and_conquer" if is_chaotic else "default"
+                    role_val = "decomposition_specialist" if is_chaotic else "exploration_specialist"
+                    
+                    # Instantiate MicroAgent with Phenotypic Differentiation
                     agents[new_aid] = MicroAgent(
                         agent_id=new_aid,
-                        role="undifferentiated_unit",
-                        system_prompt="You are a generic processing unit. Output only the answer.",
+                        role=role_val,
+                        system_prompt="You are a specialized processing unit. Output only the answer.",
                         client=client,
                         somatic_memory=SomaticVectorStore()
                     )
                     agents[new_aid].use_somatic_memory = use_somatic_memory
-                    agents[new_aid].strategy = "undifferentiated"
+                    agents[new_aid].strategy = strat_val
+                    agents[new_aid].base_temperature = temp_val
                     agents[new_aid].solved_count = 0
                     agents[new_aid].failures_count = 0
                     
@@ -889,7 +953,9 @@ def run_swarm(
                     "max_trust": 0.5,
                     "coordination_entropy": 0.0,
                     "persistence": 1.0,
-                    "switching_rate": 0.0
+                    "switching_rate": 0.0,
+                    "cognitive_load": 0.0,
+                    "mycorrhizal_used": False
                 })
                 history_fdi.append(0.0)
                 history_dominance.append(0.0)
@@ -898,6 +964,8 @@ def run_swarm(
                 history_coordination_entropy.append(0.0)
                 history_persistence.append(1.0)
                 history_switching_rate.append(0.0)
+                history_cognitive_load.append(0.0)
+                history_mycorrhizal_calls.append(0)
             break
             
         # Determine local neighborhood map (top-3 trusted peers)
@@ -912,8 +980,17 @@ def run_swarm(
         bids = {}
         for aid in active_ids:
             agent = agents[aid]
-            domain_solved = spec_matrix.get(aid, {}).get(domain, 0)
-            monopoly_tax = min(0.4, domain_solved * 0.03)
+            # Vascular pressure-based dynamic monopoly tax
+            global_resources = [agents[x].resource for x in active_ids]
+            mu_global = np.mean(global_resources) if global_resources else 100.0
+            
+            local_neighbors = neighbor_map.get(aid, [])
+            local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
+            mu_local = np.mean(local_resources) if local_resources else mu_global
+            
+            ratio = mu_global / (mu_local + 0.001)
+            monopoly_tax = TAU_MONOPOLY * (1.0 + 0.5 * getattr(agent, 'cognitive_load', 0.0)) * ratio
+            monopoly_tax = min(0.8, monopoly_tax)
             
             competence = 0.0
             if use_somatic_memory:
@@ -931,13 +1008,21 @@ def run_swarm(
             
         primary_id = max(bids, key=bids.get)
         primary = agents[primary_id]
-        primary_domain_solved = spec_matrix.get(primary_id, {}).get(domain, 0)
-        primary_tax = min(0.4, primary_domain_solved * 0.03)
+        
+        global_resources = [agents[x].resource for x in active_ids]
+        mu_global = np.mean(global_resources) if global_resources else 100.0
+        local_neighbors = neighbor_map.get(primary_id, [])
+        local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
+        mu_local = np.mean(local_resources) if local_resources else mu_global
+        ratio = mu_global / (mu_local + 0.001)
+        primary_tax = min(0.8, TAU_MONOPOLY * (1.0 + 0.5 * getattr(primary, 'cognitive_load', 0.0)) * ratio)
         print(f"  [Bid Won] Unit {primary_id} claims task (Monopoly Tax: {primary_tax*100:.1f}%)")
         
         # Execute Task
-        res = primary.solve(prompt)
+        res = primary.solve(prompt, agents=agents)
         answer = res["text"].strip()
+        if res.get("mycorrhizal_used", False):
+            mycorrhizal_used = True
         success = verify_task(answer, expected)
         
         # Apply environment outcome noise
@@ -946,6 +1031,7 @@ def run_swarm(
             print("      [Environment Noise] Success invalidated by channel noise.")
             
         primary.record_attempt(answer, "verified", success, prompt=prompt)
+        primary.cognitive_load += 0.5
         
         final_success = success
         final_solver_id = primary_id
@@ -974,8 +1060,14 @@ def run_swarm(
                 if aid in active_ids:
                     agent = agents[aid]
                     trust = primary.trust_scores.get(aid, 0.5)
-                    domain_solved = spec_matrix.get(aid, {}).get(domain, 0)
-                    monopoly_tax = min(0.4, domain_solved * 0.03)
+                    # Vascular pressure-based dynamic monopoly tax
+                    global_resources = [agents[x].resource for x in active_ids]
+                    mu_global = np.mean(global_resources) if global_resources else 100.0
+                    local_neighbors = neighbor_map.get(aid, [])
+                    local_resources = [agents[x].resource for x in local_neighbors if x in active_ids]
+                    mu_local = np.mean(local_resources) if local_resources else mu_global
+                    ratio = mu_global / (mu_local + 0.001)
+                    monopoly_tax = min(0.8, TAU_MONOPOLY * (1.0 + 0.5 * getattr(agent, 'cognitive_load', 0.0)) * ratio)
                     
                     competence = 0.0
                     if use_somatic_memory:
@@ -1001,8 +1093,10 @@ def run_swarm(
                 helper.adjust_resource(-2)
                 
                 # Helper attempt
-                helper_res = helper.solve(f"Previous agent failed. Objective:\n{prompt}\nSolve and output ONLY answer.")
+                helper_res = helper.solve(f"Previous agent failed. Objective:\n{prompt}\nSolve and output ONLY answer.", agents=agents)
                 helper_answer = helper_res["text"].strip()
+                if helper_res.get("mycorrhizal_used", False):
+                    mycorrhizal_used = True
                 final_success = verify_task(helper_answer, expected)
                 
                 # Helper outcome noise check
@@ -1011,6 +1105,7 @@ def run_swarm(
                     print("      [Environment Noise] Helper success invalidated by channel noise.")
                     
                 helper.record_attempt(helper_answer, "verified_backup", final_success, prompt=prompt)
+                helper.cognitive_load += 0.5
                 
                 if final_success:
                     print(f"    [Helper Success] Helper {helper_id} resolved delegated task.")
@@ -1029,15 +1124,48 @@ def run_swarm(
                         )
                         
                     # Trust network updates (local & symmetric)
-                    primary.trust_scores[helper_id] = min(1.0, primary.trust_scores.get(helper_id, 0.5) + 0.03)
+                    primary.trust_scores[helper_id] = min(1.0, primary.trust_scores.get(helper_id, 0.5) + DELTA_SUCCESS)
                     helper.trust_scores[primary_id] = min(1.0, helper.trust_scores.get(primary_id, 0.5) + 0.01)
                 else:
                     print(f"    [Helper Failure] Helper {helper_id} failed.")
                     # Penalize trust locally
-                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - 0.02)
+                    primary.trust_scores[helper_id] = max(0.0, primary.trust_scores.get(helper_id, 0.5) - DELTA_FAILURE)
                     # Penalize helper resources for failed work
                     helper.adjust_resource(-5)
                     
+        # Topological Ethylene Diffusion: Diffuse a fraction of each agent's ethylene to their delegation neighbors
+        diffusion_amounts = {aid: 0.0 for aid in active_ids}
+        for aid in active_ids:
+            agent = agents[aid]
+            if getattr(agent, 'ethylene_level', 0.0) > 0.0:
+                neighbors = neighbor_map.get(aid, [])
+                if neighbors:
+                    fraction = 0.1
+                    amount_to_diffuse = agent.ethylene_level * fraction
+                    agent.ethylene_level -= amount_to_diffuse
+                    
+                    per_neighbor = amount_to_diffuse / len(neighbors)
+                    for n_id in neighbors:
+                        if n_id in agents:
+                            diffusion_amounts[n_id] += per_neighbor
+                            
+        for aid in active_ids:
+            agents[aid].ethylene_level = round(agents[aid].ethylene_level + diffusion_amounts.get(aid, 0.0), 4)
+            
+        # Scavenging: Idle agents actively clean their load and ethylene at energy cost
+        active_solvers = {primary_id}
+        if helper_id is not None:
+            active_solvers.add(helper_id)
+            
+        for aid in active_ids:
+            if aid not in active_solvers:
+                agent = agents[aid]
+                if agent.resource > 10 and agent.cognitive_load > 0:
+                    agent.resource -= 2
+                    agent.cognitive_load = max(0.0, agent.cognitive_load - 0.3)
+                    agent.ethylene_level = round(agent.ethylene_level * np.exp(-0.6), 4)
+                    print(f"      [Scavenging] Idle agent {aid} spent 2 resource to accelerate decay (load={agent.cognitive_load:.2f}, ethylene={agent.ethylene_level:.2f})")
+                        
         # Update Specialization Matrix and Solved Count on success
         if final_success:
             spec_matrix[final_solver_id][domain] += 1
@@ -1111,6 +1239,12 @@ def run_swarm(
         history_persistence.append(persistence)
         history_switching_rate.append(switching_rate_val)
         
+        # Collect mean cognitive load
+        active_loads = [agents[x].cognitive_load for x in active_ids]
+        mean_load = np.mean(active_loads) if active_loads else 0.0
+        history_cognitive_load.append(mean_load)
+        history_mycorrhizal_calls.append(1 if mycorrhizal_used else 0)
+        
         results.append({
             "task_id": current_task["id"],
             "success": final_success,
@@ -1121,7 +1255,9 @@ def run_swarm(
             "max_trust": max_tr,
             "coordination_entropy": coord_entropy,
             "persistence": persistence,
-            "switching_rate": switching_rate_val
+            "switching_rate": switching_rate_val,
+            "cognitive_load": mean_load,
+            "mycorrhizal_used": mycorrhizal_used
         })
         
         # Phase-wise matrix capture and saving
@@ -1138,8 +1274,11 @@ def run_swarm(
                     peers.sort(key=lambda bid: agents[aid].trust_scores.get(bid, 0.5), reverse=True)
                     original_neighbors = peers[:3]
                     
+                    # Get local load mean
+                    local_loads = [agents[x].cognitive_load for x in original_neighbors if x in agents]
+                    local_load_mean = np.mean(local_loads) if local_loads else 0.0
                     # Instantiate LSystemRegenerator
-                    regeneration_queue[aid] = LSystemRegenerator(aid, original_neighbors)
+                    regeneration_queue[aid] = LSystemRegenerator(aid, original_neighbors, local_load_mean)
                     
         time.sleep(0.02)
         
@@ -1150,7 +1289,9 @@ def run_swarm(
         "max_trust": history_max_trust,
         "coordination_entropy": history_coordination_entropy,
         "persistence": history_persistence,
-        "switching_rate": history_switching_rate
+        "switching_rate": history_switching_rate,
+        "cognitive_load": history_cognitive_load,
+        "mycorrhizal_calls": history_mycorrhizal_calls
     }, agents
 
 
@@ -1367,7 +1508,7 @@ def run_statistical_experiment(
     to guarantee statistical independence while calculating averages and standard deviations.
     """
     if seeds is None:
-        seeds = list(range(42, 42 + 30))
+        seeds = list(range(42, 42 + 5))
         
     print(f"\n{'='*80}")
     print(f"RUNNING STATISTICAL MULTI-SEED EXPERIMENT: {group_name}")
@@ -1385,6 +1526,7 @@ def run_statistical_experiment(
     all_traj_fdi = []
     all_traj_entropy = []
     all_traj_switching = []
+    all_traj_cognitive_load = []
     
     for seed_idx, seed in enumerate(seeds):
         print(f"\n>>> Seed {seed} ({seed_idx+1}/{len(seeds)}) <<<")
@@ -1441,6 +1583,9 @@ def run_statistical_experiment(
                 
                 all_traj_switching.append(metrics["switching_rate"])
                 
+                # Carga cognitiva média
+                all_traj_cognitive_load.append(metrics.get("cognitive_load", [0.0] * len(results)))
+                
             rolling_accs = []
             for t in range(len(results)):
                 window = [1 if results[i]["success"] else 0 for i in range(max(0, t-2), t+1)]
@@ -1488,7 +1633,8 @@ def run_statistical_experiment(
         "spec_matrices": final_spec_matrices,
         "traj_fdi_mean": np.mean(all_traj_fdi, axis=0).tolist(),
         "traj_entropy_mean": np.mean(all_traj_entropy, axis=0).tolist(),
-        "traj_switching_mean": np.mean(all_traj_switching, axis=0).tolist()
+        "traj_switching_mean": np.mean(all_traj_switching, axis=0).tolist(),
+        "traj_cognitive_load_mean": np.mean(all_traj_cognitive_load, axis=0).tolist()
     }
 
 
@@ -1506,7 +1652,7 @@ def run_statistical_lesion(
     demonstrating the dynamic restructuring advantages over Fixed Role rigidity.
     """
     if seeds is None:
-        seeds = list(range(42, 42 + 30))
+        seeds = list(range(42, 42 + 5))
         
     print(f"\n{'='*80}")
     print(f"RUNNING STATISTICAL LESION STUDY: {group_name}")
@@ -1922,6 +2068,7 @@ def plot_emergence_phase_diagram(res_c):
     fdi = np.array(res_c["traj_fdi_mean"])
     entropy = np.array(res_c["traj_entropy_mean"])
     switching = np.array(res_c["traj_switching_mean"])
+    cognitive_load = np.array(res_c.get("traj_cognitive_load_mean", [0.0] * len(steps)))
     
     fig, ax = plt.subplots(figsize=(10, 6))
     
@@ -1929,6 +2076,7 @@ def plot_emergence_phase_diagram(res_c):
     ax.plot(steps, fdi, label="FDI (Functional Differentiation Index)", color="#2ca02c", linewidth=3)
     ax.plot(steps, entropy, label="Coordination Entropy (Normalized)", color="#1f77b4", linewidth=2.5, linestyle="--")
     ax.plot(steps, switching, label="Switching Rate of Roles", color="#ff7f0e", linewidth=2.5, linestyle=":")
+    ax.plot(steps, cognitive_load, label="Mean Cognitive Load", color="#d62728", linewidth=2.5, linestyle="-.")
     
     # Visual markers for developmental phases
     ax.axvline(x=20.5, color="gray", linestyle="-.", alpha=0.4)
@@ -1995,13 +2143,14 @@ def plot_environment_comparison(env_results):
 
 
 def main():
-    print("[Warm-up] Initializing qwen2.5:0.5b in GPU memory...")
+    print("[Warm-up] Initializing qwen2.5:0.5b and nomic-embed-text in GPU memory...")
     client.pull_model("qwen2.5:0.5b")
+    client.pull_model("nomic-embed-text")
     client.generate(prompt="Hello", model_name="qwen2.5:0.5b")
     print("[Warm-up] Done.\n")
     
     # For dry-run, use 2 seeds. For full production run, use 30 seeds.
-    seeds = list(range(42, 42 + 30))
+    seeds = list(range(42, 42 + 5))
     
     # 1. Run Multi-Epoch Experiments across 30 seeds
     res_c = run_statistical_experiment(
